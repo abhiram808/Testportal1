@@ -69,27 +69,18 @@ export default function Quiz({ subdomain }) {
     );
 }
 
-  if (submitted) {
-    return (
-      
-        Assessment Submitted
-        
-          Respondent: {respondentName}
-        
-        
-          
-            Score: {result.score} / {result.totalQuestions}
-          
-          
-            Percentage: {result.percentage}%
-          
-          
-            Focus Violations: {result.focusLossCount}
-          
-        
-      
-    );
-  }
+  if (isSubmitted) {
+  return (
+    <div className="max-w-md mx-auto my-12 p-8 bg-white rounded-xl shadow-md text-center space-y-4 border border-slate-200">
+      <h2 className="text-2xl font-bold text-emerald-600">
+        Assessment Submitted!
+      </h2>
+      <p className="text-slate-600">
+        Thank you! Your responses have been recorded successfully.
+      </p>
+    </div>
+  );
+}
 
   if (!hasStarted) {
     return (
