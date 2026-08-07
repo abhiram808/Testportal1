@@ -7,13 +7,27 @@ const socket = io(BACKEND_URL);
 
 export default function Quiz({ subdomain }) {
   const [quiz, setQuiz] = useState(null);
-  const [respondentName, setRespondentName] = useState('');
-  const [hasStarted, setHasStarted] = useState(false);
-  const [answers, setAnswers] = useState({});
+
+  // Restore saved session state from localStorage if user refreshes
+  const [respondentName, setRespondentName] = useState(() => {
+    return localStorage.getItem(`quiz_${subdomain}_name`) || '';
+  });
+  const [hasStarted, setHasStarted] = useState(() => {
+    return localStorage.getItem(`quiz_${subdomain}_started`) === 'true';
+  });
+  const [answers, setAnswers] = useState(() => {
+    const saved = localStorage.getItem(`quiz_${subdomain}_answers`);
+    return saved ? JSON.parse(saved) : {};
+  });
+  const [focusLossCount, setFocusLossCount] = useState(() => {
+    const saved = localStorage.getItem(`quiz_${subdomain}_violations`);
+    return saved ? Number(saved) : 0;
+  });
+
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [scoreResult, setScoreResult] = useState(null);
-  const [focusLossCount, setFocusLossCount] = useState(0);
 
+  // Fetch Quiz Details
   useEffect(() => {
     fetch(`${BACKEND_URL}/api/quizzes/${subdomain}`)
       .then((res) => res.json())
@@ -21,6 +35,30 @@ export default function Quiz({ subdomain }) {
       .catch((err) => console.error('Error fetching quiz:', err));
   }, [subdomain]);
 
+  // Sync session state to localStorage while test is active
+  useEffect(() => {
+    if (hasStarted && !isSubmitted) {
+      localStorage.setItem(`quiz_${subdomain}_name`, respondentName);
+      localStorage.setItem(`quiz_${subdomain}_started`, 'true');
+      localStorage.setItem(`quiz_${subdomain}_answers`, JSON.stringify(answers));
+      localStorage.setItem(`quiz_${subdomain}_violations`, focusLossCount.toString());
+    }
+  }, [hasStarted, isSubmitted, respondentName, answers, focusLossCount, subdomain]);
+
+  // Prevent accidental page refresh / exit while test is active
+  useEffect(() => {
+    const handleBeforeUnload = (e) => {
+      if (hasStarted && !isSubmitted) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [hasStarted, isSubmitted]);
+
+  // Track Tab Switches / Focus Loss
   useEffect(() => {
     if (!hasStarted || isSubmitted) return;
 
@@ -67,9 +105,16 @@ export default function Quiz({ subdomain }) {
       const data = await res.json();
       setScoreResult(data);
       setIsSubmitted(true);
+
+      // Clean up localStorage after successful submission
+      localStorage.removeItem(`quiz_${subdomain}_name`);
+      localStorage.removeItem(`quiz_${subdomain}_started`);
+      localStorage.removeItem(`quiz_${subdomain}_answers`);
+      localStorage.removeItem(`quiz_${subdomain}_violations`);
     }
   };
 
+  // Screen 1: Loading / Not Found
   if (!quiz) {
     return (
       <div className="max-w-md mx-auto my-12 p-6 bg-white rounded-xl shadow-sm border border-slate-200 text-center">
@@ -80,6 +125,7 @@ export default function Quiz({ subdomain }) {
     );
   }
 
+  // Screen 2: Submitted
   if (isSubmitted) {
     return (
       <div className="max-w-md mx-auto my-12 p-8 bg-white rounded-xl shadow-sm border border-slate-200 text-center space-y-4">
@@ -98,6 +144,7 @@ export default function Quiz({ subdomain }) {
     );
   }
 
+  // Screen 3: Start Screen
   if (!hasStarted) {
     return (
       <div className="max-w-md mx-auto my-12 p-6 bg-white rounded-xl shadow-sm border border-slate-200 space-y-6">
@@ -139,6 +186,7 @@ export default function Quiz({ subdomain }) {
     );
   }
 
+  // Screen 4: Active Assessment
   return (
     <div className="max-w-3xl mx-auto my-8 p-6 bg-white rounded-xl shadow-sm border border-slate-200 space-y-6">
       {/* Violation Alert Banner */}
@@ -149,9 +197,16 @@ export default function Quiz({ subdomain }) {
       )}
 
       {/* Quiz Header */}
-      <div className="border-b border-slate-200 pb-4">
-        <h1 className="text-2xl font-bold text-slate-800">{quiz.title}</h1>
-        <p className="text-sm text-slate-500">Respondent: {respondentName}</p>
+      <div className="border-b border-slate-200 pb-4 flex justify-between items-center">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-800">{quiz.title}</h1>
+          <p className="text-sm text-slate-500">Respondent: {respondentName}</p>
+        </div>
+        {focusLossCount > 0 && (
+          <span className="px-3 py-1 bg-red-100 text-red-700 rounded-full text-xs font-semibold">
+            Tab Switches: {focusLossCount}
+          </span>
+        )}
       </div>
 
       {/* Questions List */}
