@@ -4,39 +4,28 @@ import { BrowserRouter, Routes, Route, useSearchParams, useParams } from 'react-
 import Admin from './admin.jsx';
 import Quiz from './quiz.jsx';
 
-// Wrapper to handle quiz param or path parameter
-function QuizWrapper() {
+function QuizResolver() {
   const { subdomain } = useParams();
   const [searchParams] = useSearchParams();
-  const querySubdomain = searchParams.get('quiz');
+  const activeQuiz = subdomain || searchParams.get('quiz');
 
-  const activeSubdomain = subdomain || querySubdomain;
-
-  if (!activeSubdomain) {
-    return ;
+  if (activeQuiz) {
+    return <Quiz subdomain={activeQuiz} />;
   }
-
-  return ;
+  return <Admin />;
 }
 
 export default function App() {
   return (
-    
-      
-        
-          {/* Home route: Shows Admin if no ?quiz= param, or Quiz if ?quiz=slug is present */}
-          } />
-
-          {/* Direct route for Admin panel */}
-          } />
-
-          {/* Direct URL path route for Quizzes (e.g., /quiz/math-101) */}
-          } />
-
-          {/* Fallback route */}
-          } />
-        
-      
-    
+    <BrowserRouter>
+      <div className="min-h-screen bg-slate-50 p-6">
+        <Routes>
+          <Route path="/" element={<QuizResolver />} />
+          <Route path="/admin" element={<Admin />} />
+          <Route path="/quiz/:subdomain" element={<QuizResolver />} />
+          <Route path="*" element={<QuizResolver />} />
+        </Routes>
+      </div>
+    </BrowserRouter>
   );
 }
