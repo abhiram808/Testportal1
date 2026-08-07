@@ -127,19 +127,45 @@ export default function Quiz({ subdomain }) {
 
   // Screen 2: Submitted
   if (isSubmitted) {
+    // Safely extract scores with property name fallbacks
+    const score =
+      scoreResult?.score ??
+      scoreResult?.correctCount ??
+      scoreResult?.correct ??
+      0;
+
+    const totalQuestions =
+      scoreResult?.totalQuestions ??
+      scoreResult?.total ??
+      quiz?.questions?.length ??
+      0;
+
+    // Calculate percentage if not provided directly by backend API
+    const percentage =
+      scoreResult?.percentage ??
+      (totalQuestions > 0 ? Math.round((score / totalQuestions) * 100) : 0);
+
     return (
       <div className="max-w-md mx-auto my-12 p-8 bg-white rounded-xl shadow-sm border border-slate-200 text-center space-y-4">
-        <h2 className="text-2xl font-bold text-emerald-600">Assessment Submitted!</h2>
-        <p className="text-slate-600">Thank you, {respondentName}. Your responses have been recorded.</p>
-        {scoreResult && (
-          <div className="p-4 bg-slate-50 rounded-lg border border-slate-200 my-4">
-            <p className="text-sm text-slate-500">Your Score</p>
-            <p className="text-3xl font-extrabold text-indigo-600">
-              {scoreResult.score} / {scoreResult.totalQuestions}
-            </p>
-            <p className="text-xs text-slate-400 mt-1">({scoreResult.percentage}%)</p>
-          </div>
-        )}
+        <h2 className="text-2xl font-bold text-emerald-600">
+          Assessment Submitted!
+        </h2>
+        <p className="text-slate-600">
+          Thank you, {respondentName || 'Candidate'}. Your responses have been recorded.
+        </p>
+
+        {/* Score Card Display */}
+        <div className="p-6 bg-slate-50 rounded-lg border border-slate-200 my-4">
+          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+            Your Final Score
+          </p>
+          <p className="text-4xl font-extrabold text-indigo-600 my-2">
+            {score} / {totalQuestions}
+          </p>
+          <p className="text-sm font-medium text-slate-600">
+            {percentage}%
+          </p>
+        </div>
       </div>
     );
   }
