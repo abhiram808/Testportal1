@@ -63,11 +63,11 @@ export default function Quiz({ subdomain }) {
 
   if (!quiz) {
     return (
-      
-        Loading assessment or quiz not found. Try navigating via ?quiz=YOUR_SLUG.
-      
+        <div className="p-6 text-center text-slate-600 font-medium">
+            Loading assessment or quiz not found. Try navigating via ?quiz=YOUR_SLUG.
+        </div>
     );
-  }
+}
 
   if (submitted) {
     return (
