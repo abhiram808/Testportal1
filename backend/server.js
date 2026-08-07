@@ -35,10 +35,45 @@ const db = {
 };
 
 app.post('/api/quizzes', (req, res) => {
-  const { title, subdomain, timeLimitMinutes, questions } = req.body;
+  const { title, subdomain, timeLimitMinutes, passcode, questions } = req.body;
+
   if (!title || !subdomain) {
-    return res.status(400).json({ error: 'Title and Subdomain are required' });
+    return res.status(400).json({ message: 'Title and subdomain are required.' });
   }
+
+  const newQuiz = {
+    id: Date.now().toString(),
+    title,
+    subdomain,
+    timeLimitMinutes: Number(timeLimitMinutes) || 15,
+    passcode: passcode ? passcode.trim() : '',
+    questions: questions || []
+  };
+
+  // Save to your database or array
+  quizzes.push(newQuiz);
+
+  res.status(201).json({ message: 'Quiz created successfully', quiz: newQuiz });
+});
+
+// GET /api/quizzes/:subdomain - Fetch quiz by subdomain
+app.get('/api/quizzes/:subdomain', (req, res) => {
+  const { subdomain } = req.params;
+  const quiz = quizzes.find((q) => q.subdomain === subdomain);
+
+  if (!quiz) {
+    return res.status(404).json({ message: 'Quiz not found' });
+  }
+
+  res.json({
+    id: quiz.id,
+    title: quiz.title,
+    subdomain: quiz.subdomain,
+    timeLimitMinutes: quiz.timeLimitMinutes,
+    passcode: quiz.passcode || '',
+    questions: quiz.questions
+  });
+});
 
   const newQuiz = { 
     id: subdomain, 
