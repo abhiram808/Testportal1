@@ -15,6 +15,7 @@ export default function Admin() {
   const [title, setTitle] = useState('');
   const [subdomainInput, setSubdomainInput] = useState('');
   const [timeLimit, setTimeLimit] = useState(15);
+  const [passcode, setPasscode] = useState(''); // Added Passcode State
   const [questions, setQuestions] = useState([
     { id: 1, text: '', options: ['', '', '', ''], correct: 0 }
   ]);
@@ -36,7 +37,6 @@ export default function Admin() {
     };
   }, []);
 
-  // --- DOCX PARSER LOGIC ---
   const handleDocxUpload = (event) => {
     const file = event.target.files[0];
     if (!file) return;
@@ -53,7 +53,7 @@ export default function Admin() {
           setQuestions(parsedQuestions);
           alert(`Successfully imported ${parsedQuestions.length} questions from Word document!`);
         } else {
-          alert('Could not detect any questions. Please check the Word document format.');
+          alert('Could not detect any questions. Please check Word document format.');
         }
       } catch (error) {
         console.error('Docx Parse Error:', error);
@@ -69,11 +69,8 @@ export default function Admin() {
     let currentQ = null;
 
     lines.forEach((line) => {
-      // Question Line (e.g., "1. What is...", "Q1: What is...")
       const qMatch = line.match(/^(?:Q?\d+[\.\:]|\d+\.)\s*(.+)/i);
-      // Option Line (e.g., "A) Option", "A. Option", "1) Option")
       const optMatch = line.match(/^(?:[A-D]\)|[A-D]\.|[1-4]\))\s*(.+)/i);
-      // Correct Answer Line (e.g., "Answer: A", "Ans: B", "Correct: C")
       const ansMatch = line.match(/^(?:Answer|Ans|Correct|Correct Answer)\s*:\s*([A-D]|[1-4])/i);
 
       if (ansMatch && currentQ) {
@@ -102,7 +99,6 @@ export default function Admin() {
 
     if (currentQ) parsed.push(currentQ);
 
-    // Pad options if fewer than 4 were supplied
     return parsed.map((q) => {
       while (q.options.length < 4) {
         q.options.push(`Option ${q.options.length + 1}`);
@@ -131,6 +127,7 @@ export default function Admin() {
         title,
         subdomain: subdomainInput,
         timeLimitMinutes: Number(timeLimit),
+        passcode, // Sending passcode to backend
         questions
       })
     });
@@ -139,13 +136,14 @@ export default function Admin() {
       alert(`Quiz Published! Test Link: ${window.location.origin}/?quiz=${subdomainInput}`);
       setTitle('');
       setSubdomainInput('');
+      setPasscode('');
       setQuestions([{ id: 1, text: '', options: ['', '', '', ''], correct: 0 }]);
     }
   };
 
   return (
     <div className="max-w-6xl mx-auto p-6 bg-white rounded-xl shadow-sm border border-slate-200 my-6">
-      {/* Tabs */}
+      {/* Tabs Header */}
       <div className="flex space-x-8 border-b border-slate-200 mb-6">
         {['create', 'live', 'results'].map((t) => (
           <button
@@ -171,8 +169,7 @@ export default function Admin() {
         <div className="space-y-6">
           <div className="flex justify-between items-center">
             <h2 className="text-xl font-bold text-slate-800">Prepare New Assessment</h2>
-            
-            {/* DOCX FILE UPLOAD BUTTON */}
+
             <label className="cursor-pointer bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-4 py-2 rounded-md text-sm font-semibold border border-indigo-200 transition flex items-center space-x-2">
               <span>📄 Import from Word (.docx)</span>
               <input
@@ -184,7 +181,7 @@ export default function Admin() {
             </label>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div>
               <label className="block text-sm font-medium text-slate-700">Quiz Title</label>
               <input
@@ -218,6 +215,17 @@ export default function Admin() {
                 className="mt-1 w-full border border-slate-300 rounded p-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
               />
             </div>
+
+            <div>
+              <label className="block text-sm font-medium text-slate-700">Group Passcode (Optional)</label>
+              <input
+                type="text"
+                value={passcode}
+                onChange={(e) => setPasscode(e.target.value)}
+                placeholder="e.g. SECRET123"
+                className="mt-1 w-full border border-slate-300 rounded p-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+              />
+            </div>
           </div>
 
           <hr className="border-slate-200 my-6" />
@@ -244,7 +252,6 @@ export default function Admin() {
                   className="w-full border border-slate-300 rounded p-2 text-sm bg-white focus:ring-2 focus:ring-indigo-500 outline-none"
                 />
 
-                {/* Options List */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2">
                   {q.options.map((opt, optIdx) => (
                     <div key={optIdx} className="flex items-center space-x-2">

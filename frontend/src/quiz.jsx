@@ -8,10 +8,10 @@ const socket = io(BACKEND_URL);
 export default function Quiz({ subdomain }) {
   const [quiz, setQuiz] = useState(null);
 
-  // Restore saved session state from localStorage if user refreshes
   const [respondentName, setRespondentName] = useState(() => {
     return localStorage.getItem(`quiz_${subdomain}_name`) || '';
   });
+  const [passcode, setPasscode] = useState(''); // Passcode Entry State
   const [hasStarted, setHasStarted] = useState(() => {
     return localStorage.getItem(`quiz_${subdomain}_started`) === 'true';
   });
@@ -24,10 +24,14 @@ export default function Quiz({ subdomain }) {
     return saved ? Number(saved) : 0;
   });
 
-  const [isSubmitted, setIsSubmitted] = useState(false);
-  const [scoreResult, setScoreResult] = useState(null);
+  const [isSubmitted, setIsSubmitted] = useState(() => {
+    return localStorage.getItem(`quiz_${subdomain}_submitted`) === 'true';
+  });
+  const [scoreResult, setScoreResult] = useState(() => {
+    const saved = localStorage.getItem(`quiz_${subdomain}_score`);
+    return saved ? JSON.parse(saved) : null;
+  });
 
-  // Fetch Quiz Details
   useEffect(() => {
     fetch(`${BACKEND_URL}/api/quizzes/${subdomain}`)
       .then((res) => res.json())
@@ -35,7 +39,6 @@ export default function Quiz({ subdomain }) {
       .catch((err) => console.error('Error fetching quiz:', err));
   }, [subdomain]);
 
-  // Sync session state to localStorage while test is active
   useEffect(() => {
     if (hasStarted && !isSubmitted) {
       localStorage.setItem(`quiz_${subdomain}_name`, respondentName);
@@ -45,7 +48,6 @@ export default function Quiz({ subdomain }) {
     }
   }, [hasStarted, isSubmitted, respondentName, answers, focusLossCount, subdomain]);
 
-  // Prevent accidental page refresh / exit while test is active
   useEffect(() => {
     const handleBeforeUnload = (e) => {
       if (hasStarted && !isSubmitted) {
@@ -58,7 +60,6 @@ export default function Quiz({ subdomain }) {
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, [hasStarted, isSubmitted]);
 
-  // Track Tab Switches / Focus Loss
   useEffect(() => {
     if (!hasStarted || isSubmitted) return;
 
@@ -86,35 +87,50 @@ export default function Quiz({ subdomain }) {
       alert('Please enter your full name to start.');
       return;
     }
+
+    // Check Passcode Validation
+    if (quiz.passcode && passcode.trim() !== quiz.passcode) {
+      alert('Incorrect Group Passcode! Please check and try again.');
+      return;
+    }
+
     setHasStarted(true);
     socket.emit('start_session', { subdomain, respondentName });
   };
 
   const handleSubmit = async () => {
-    const res = await fetch(`${BACKEND_URL}/api/quizzes/${subdomain}/submit`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        respondentName,
-        answers,
-        focusLossCount
-      })
-    });
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/quizzes/${subdomain}/submit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          respondentName,
+          answers,
+          focusLossCount
+        })
+      });
 
-    if (res.ok) {
-      const data = await res.json();
-      setScoreResult(data);
-      setIsSubmitted(true);
+      if (res.ok) {
+        const data = await res.json();
+        setScoreResult(data);
+        setIsSubmitted(true);
 
-      // Clean up localStorage after successful submission
-      localStorage.removeItem(`quiz_${subdomain}_name`);
-      localStorage.removeItem(`quiz_${subdomain}_started`);
-      localStorage.removeItem(`quiz_${subdomain}_answers`);
-      localStorage.removeItem(`quiz_${subdomain}_violations`);
+        localStorage.setItem(`quiz_${subdomain}_submitted`, 'true');
+        localStorage.setItem(`quiz_${subdomain}_score`, JSON.stringify(data));
+
+        localStorage.removeItem(`quiz_${subdomain}_started`);
+        localStorage.removeItem(`quiz_${subdomain}_answers`);
+        localStorage.removeItem(`quiz_${subdomain}_violations`);
+      } else {
+        const errorData = await res.json().catch(() => ({}));
+        alert(errorData.message || 'Submission failed. Please try again.');
+      }
+    } catch (err) {
+      console.error('Submission error:', err);
+      alert('Network error when submitting your quiz.');
     }
   };
 
-  // Screen 1: Loading / Not Found
   if (!quiz) {
     return (
       <div className="max-w-md mx-auto my-12 p-6 bg-white rounded-xl shadow-sm border border-slate-200 text-center">
@@ -125,9 +141,7 @@ export default function Quiz({ subdomain }) {
     );
   }
 
-  // Screen 2: Submitted
   if (isSubmitted) {
-    // Safely extract scores with property name fallbacks
     const score =
       scoreResult?.score ??
       scoreResult?.correctCount ??
@@ -140,7 +154,6 @@ export default function Quiz({ subdomain }) {
       quiz?.questions?.length ??
       0;
 
-    // Calculate percentage if not provided directly by backend API
     const percentage =
       scoreResult?.percentage ??
       (totalQuestions > 0 ? Math.round((score / totalQuestions) * 100) : 0);
@@ -154,7 +167,6 @@ export default function Quiz({ subdomain }) {
           Thank you, {respondentName || 'Candidate'}. Your responses have been recorded.
         </p>
 
-        {/* Score Card Display */}
         <div className="p-6 bg-slate-50 rounded-lg border border-slate-200 my-4">
           <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
             Your Final Score
@@ -170,7 +182,7 @@ export default function Quiz({ subdomain }) {
     );
   }
 
-  // Screen 3: Start Screen
+  // Start Screen with Passcode Requirement
   if (!hasStarted) {
     return (
       <div className="max-w-md mx-auto my-12 p-6 bg-white rounded-xl shadow-sm border border-slate-200 space-y-6">
@@ -188,17 +200,35 @@ export default function Quiz({ subdomain }) {
           </p>
         </div>
 
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">
-            Full Name
-          </label>
-          <input
-            type="text"
-            value={respondentName}
-            onChange={(e) => setRespondentName(e.target.value)}
-            placeholder="John Doe"
-            className="mt-1 w-full border border-slate-300 rounded p-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
-          />
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">
+              Full Name
+            </label>
+            <input
+              type="text"
+              value={respondentName}
+              onChange={(e) => setRespondentName(e.target.value)}
+              placeholder="John Doe"
+              className="mt-1 w-full border border-slate-300 rounded p-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+            />
+          </div>
+
+          {/* Render Passcode Input IF Quiz Has Passcode Set */}
+          {quiz.passcode && (
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">
+                Group Passcode
+              </label>
+              <input
+                type="password"
+                value={passcode}
+                onChange={(e) => setPasscode(e.target.value)}
+                placeholder="Enter access code"
+                className="mt-1 w-full border border-slate-300 rounded p-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+              />
+            </div>
+          )}
         </div>
 
         <button
@@ -212,17 +242,14 @@ export default function Quiz({ subdomain }) {
     );
   }
 
-  // Screen 4: Active Assessment
   return (
     <div className="max-w-3xl mx-auto my-8 p-6 bg-white rounded-xl shadow-sm border border-slate-200 space-y-6">
-      {/* Violation Alert Banner */}
       {focusLossCount > 0 && (
         <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 font-medium text-sm">
           ⚠️ Warning: Tab switch detected! (Total violations: {focusLossCount})
         </div>
       )}
 
-      {/* Quiz Header */}
       <div className="border-b border-slate-200 pb-4 flex justify-between items-center">
         <div>
           <h1 className="text-2xl font-bold text-slate-800">{quiz.title}</h1>
@@ -235,7 +262,6 @@ export default function Quiz({ subdomain }) {
         )}
       </div>
 
-      {/* Questions List */}
       <div className="space-y-6">
         {quiz.questions && quiz.questions.map((q, idx) => (
           <div key={q.id || idx} className="p-4 border border-slate-200 rounded-lg bg-slate-50 space-y-3">
@@ -264,7 +290,6 @@ export default function Quiz({ subdomain }) {
         ))}
       </div>
 
-      {/* Submit Button */}
       <button
         type="button"
         onClick={handleSubmit}
