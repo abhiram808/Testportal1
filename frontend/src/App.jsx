@@ -1,15 +1,42 @@
 // frontend/src/App.jsx
 import React from 'react';
-import Admin from './admin.jsx';
-import Quiz from './quiz.jsx';
+import { BrowserRouter, Routes, Route, useSearchParams, useParams } from 'react-router-dom';
+import Admin from './Admin.jsx';
+import Quiz from './Quiz.jsx';
+
+// Wrapper to handle quiz param or path parameter
+function QuizWrapper() {
+  const { subdomain } = useParams();
+  const [searchParams] = useSearchParams();
+  const querySubdomain = searchParams.get('quiz');
+
+  const activeSubdomain = subdomain || querySubdomain;
+
+  if (!activeSubdomain) {
+    return ;
+  }
+
+  return ;
+}
 
 export default function App() {
-  const urlParams = new URLSearchParams(window.location.search);
-  const quizParam = urlParams.get('quiz');
-
   return (
-    <div className="min-h-screen bg-slate-50 p-6">
-      {quizParam ? <Quiz subdomain={quizParam} /> : <Admin />}
-    </div>
+    
+      
+        
+          {/* Home route: Shows Admin if no ?quiz= param, or Quiz if ?quiz=slug is present */}
+          } />
+
+          {/* Direct route for Admin panel */}
+          } />
+
+          {/* Direct URL path route for Quizzes (e.g., /quiz/math-101) */}
+          } />
+
+          {/* Fallback route */}
+          } />
+        
+      
+    
   );
 }
