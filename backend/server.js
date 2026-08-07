@@ -18,19 +18,21 @@ const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
 
+// 1. FIRST: Initialize Express App & HTTP Server
 const app = express();
 const server = http.createServer(app);
 
-// Middleware
+// 2. Middleware & Config
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'Abhi@1103';
 app.use(cors());
 app.use(express.json());
 
-// In-Memory Data Stores
+// 3. In-Memory Data Stores
 const quizzes = [];
 const activeSessions = [];
 const results = [];
 
-// Socket.io Setup
+// 4. Socket.io Setup
 const io = new Server(server, {
   cors: {
     origin: '*',
@@ -80,10 +82,21 @@ io.on('connection', (socket) => {
 });
 
 // ==========================================
-// API ENDPOINTS
+// 5. API ENDPOINTS (Defined AFTER app)
 // ==========================================
 
-// 1. Create Quiz
+// Admin Login
+app.post('/api/admin/login', (req, res) => {
+  const { password } = req.body;
+
+  if (password === ADMIN_PASSWORD) {
+    return res.json({ success: true, token: 'admin-session-active-token' });
+  }
+
+  return res.status(401).json({ success: false, message: 'Incorrect Admin Password!' });
+});
+
+// Create Quiz
 app.post('/api/quizzes', (req, res) => {
   const { title, subdomain, timeLimitMinutes, passcode, questions } = req.body;
 
@@ -105,12 +118,12 @@ app.post('/api/quizzes', (req, res) => {
   res.status(201).json({ message: 'Quiz published successfully!', quiz: newQuiz });
 });
 
-// 2. Fetch All Quizzes (Admin Dashboard)
+// Fetch All Quizzes (Admin Dashboard)
 app.get('/api/admin/quizzes', (req, res) => {
   res.json(quizzes);
 });
 
-// 3. Fetch Single Quiz (Participant View)
+// Fetch Single Quiz (Participant View)
 app.get('/api/quizzes/:subdomain', (req, res) => {
   const { subdomain } = req.params;
   const quiz = quizzes.find((q) => q.subdomain === subdomain);
@@ -130,7 +143,7 @@ app.get('/api/quizzes/:subdomain', (req, res) => {
   });
 });
 
-// 4. Update Quiz Status (Start / End Test)
+// Update Quiz Status (Start / End Test)
 app.post('/api/admin/quizzes/:subdomain/status', (req, res) => {
   const { subdomain } = req.params;
   const { status } = req.body;
@@ -146,11 +159,7 @@ app.post('/api/admin/quizzes/:subdomain/status', (req, res) => {
   res.json({ message: `Quiz status updated to ${status}`, quiz });
 });
 
-// ------------------------------------------
-// 🌟 4 NEW MANAGEMENT ENDPOINTS
-// ------------------------------------------
-
-// 5. EDIT QUIZ (PUT)
+// Edit Quiz (PUT)
 app.put('/api/admin/quizzes/:subdomain', (req, res) => {
   const { subdomain } = req.params;
   const { title, timeLimitMinutes, passcode, questions } = req.body;
@@ -171,7 +180,7 @@ app.put('/api/admin/quizzes/:subdomain', (req, res) => {
   res.json({ message: 'Quiz updated successfully!', quiz: quizzes[quizIdx] });
 });
 
-// 6. RESTART TEST
+// Restart Test
 app.post('/api/admin/quizzes/:subdomain/restart', (req, res) => {
   const { subdomain } = req.params;
   const quiz = quizzes.find((q) => q.subdomain === subdomain);
@@ -186,7 +195,7 @@ app.post('/api/admin/quizzes/:subdomain/restart', (req, res) => {
   res.json({ message: 'Test restarted successfully!', quiz });
 });
 
-// 7. DELETE QUIZ
+// Delete Quiz
 app.delete('/api/admin/quizzes/:subdomain', (req, res) => {
   const { subdomain } = req.params;
   const quizIdx = quizzes.findIndex((q) => q.subdomain === subdomain);
@@ -199,7 +208,7 @@ app.delete('/api/admin/quizzes/:subdomain', (req, res) => {
   res.json({ message: 'Quiz deleted successfully!' });
 });
 
-// 8. DELETE SINGLE RESULT
+// Delete Single Result
 app.delete('/api/admin/results/:id', (req, res) => {
   const { id } = req.params;
   const resultIdx = results.findIndex((r) => r.id === id);
@@ -212,9 +221,7 @@ app.delete('/api/admin/results/:id', (req, res) => {
   res.json({ message: 'Result deleted successfully!' });
 });
 
-// ------------------------------------------
-
-// 9. Submit Quiz Answers
+// Submit Quiz Answers
 app.post('/api/quizzes/:subdomain/submit', (req, res) => {
   const { subdomain } = req.params;
   const { respondentName, answers, focusLossCount } = req.body;
@@ -264,12 +271,12 @@ app.post('/api/quizzes/:subdomain/submit', (req, res) => {
   });
 });
 
-// 10. Fetch Results (Admin)
+// Fetch Results (Admin)
 app.get('/api/admin/results', (req, res) => {
   res.json(results);
 });
 
-// Start Server
+// 6. Start Server
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
