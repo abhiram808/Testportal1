@@ -1,4 +1,4 @@
-// frontend/src/Quiz.jsx
+// frontend/src/quiz.jsx
 import React, { useState, useEffect } from 'react';
 import { io } from 'socket.io-client';
 
@@ -10,77 +10,93 @@ export default function Quiz({ subdomain }) {
   const [respondentName, setRespondentName] = useState('');
   const [hasStarted, setHasStarted] = useState(false);
   const [answers, setAnswers] = useState({});
+  const [isSubmitted, setIsSubmitted] = useState(false);
+  const [scoreResult, setScoreResult] = useState(null);
   const [focusLossCount, setFocusLossCount] = useState(0);
-  const [submitted, setSubmitted] = useState(false);
-  const [result, setResult] = useState(null);
 
   useEffect(() => {
-    if (subdomain) {
-      fetch(`${BACKEND_URL}/api/quizzes/${subdomain}`)
-        .then((res) => res.json())
-        .then((data) => setQuiz(data))
-        .catch((err) => console.error('Error fetching quiz:', err));
-    }
+    fetch(`${BACKEND_URL}/api/quizzes/${subdomain}`)
+      .then((res) => res.json())
+      .then((data) => setQuiz(data))
+      .catch((err) => console.error('Error fetching quiz:', err));
   }, [subdomain]);
 
   useEffect(() => {
-    if (!hasStarted || submitted) return;
+    if (!hasStarted || isSubmitted) return;
 
-    const handleBlur = () => {
-      setFocusLossCount((prev) => prev + 1);
-      socket.emit('focus_lost');
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        setFocusLossCount((prev) => {
+          const updated = prev + 1;
+          socket.emit('tab_switch_detected', {
+            subdomain,
+            respondentName,
+            focusLossCount: updated,
+            timestamp: new Date().toISOString()
+          });
+          return updated;
+        });
+      }
     };
 
-    const handleFocus = () => {
-      socket.emit('focus_gained');
-    };
-
-    window.addEventListener('blur', handleBlur);
-    window.addEventListener('focus', handleFocus);
-
-    return () => {
-      window.removeEventListener('blur', handleBlur);
-      window.removeEventListener('focus', handleFocus);
-    };
-  }, [hasStarted, submitted]);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [hasStarted, isSubmitted, subdomain, respondentName]);
 
   const handleStart = () => {
-    if (!respondentName.trim()) return alert('Please enter your full name.');
+    if (!respondentName.trim()) {
+      alert('Please enter your full name to start.');
+      return;
+    }
     setHasStarted(true);
-    socket.emit('start_session', { quizId: subdomain, respondentName });
+    socket.emit('start_session', { subdomain, respondentName });
   };
 
   const handleSubmit = async () => {
     const res = await fetch(`${BACKEND_URL}/api/quizzes/${subdomain}/submit`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ respondentName, answers, focusLossCount })
+      body: JSON.stringify({
+        respondentName,
+        answers,
+        focusLossCount
+      })
     });
-    const data = await res.json();
-    setResult(data.result);
-    setSubmitted(true);
+
+    if (res.ok) {
+      const data = await res.json();
+      setScoreResult(data);
+      setIsSubmitted(true);
+    }
   };
 
   if (!quiz) {
     return (
-        <div className="p-6 text-center text-slate-600 font-medium">
-            Loading assessment or quiz not found. Try navigating via ?quiz=YOUR_SLUG.
-        </div>
+      <div className="max-w-md mx-auto my-12 p-6 bg-white rounded-xl shadow-sm border border-slate-200 text-center">
+        <p className="text-slate-600 font-medium">
+          Loading assessment or quiz not found. Try navigating via ?quiz=YOUR_SLUG.
+        </p>
+      </div>
     );
-}
+  }
 
   if (isSubmitted) {
-  return (
-    <div className="max-w-md mx-auto my-12 p-8 bg-white rounded-xl shadow-md text-center space-y-4 border border-slate-200">
-      <h2 className="text-2xl font-bold text-emerald-600">
-        Assessment Submitted!
-      </h2>
-      <p className="text-slate-600">
-        Thank you! Your responses have been recorded successfully.
-      </p>
-    </div>
-  );
-}
+    return (
+      <div className="max-w-md mx-auto my-12 p-8 bg-white rounded-xl shadow-sm border border-slate-200 text-center space-y-4">
+        <h2 className="text-2xl font-bold text-emerald-600">Assessment Submitted!</h2>
+        <p className="text-slate-600">Thank you, {respondentName}. Your responses have been recorded.</p>
+        {scoreResult && (
+          <div className="p-4 bg-slate-50 rounded-lg border border-slate-200 my-4">
+            <p className="text-sm text-slate-500">Your Score</p>
+            <p className="text-3xl font-extrabold text-indigo-600">
+              {scoreResult.score} / {scoreResult.totalQuestions}
+            </p>
+            <p className="text-xs text-slate-400 mt-1">({scoreResult.percentage}%)</p>
+          </div>
+        )}
+      </div>
+    );
+  }
 
   if (!hasStarted) {
     return (
