@@ -1,4 +1,4 @@
-// server.js (or index.js in your backend folder)
+// server.js
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
@@ -7,7 +7,6 @@ const cors = require('cors');
 const app = express();
 const server = http.createServer(app);
 
-// Middleware
 app.use(cors());
 app.use(express.json());
 
@@ -16,7 +15,6 @@ const quizzes = [];
 const activeSessions = [];
 const results = [];
 
-// Socket.io Setup
 const io = new Server(server, {
   cors: {
     origin: '*',
@@ -67,7 +65,7 @@ io.on('connection', (socket) => {
 
 // --- API ENDPOINTS ---
 
-// 1. Create Quiz (with Passcode support)
+// 1. Create & Save Quiz Questions
 app.post('/api/quizzes', (req, res) => {
   const { title, subdomain, timeLimitMinutes, passcode, questions } = req.body;
 
@@ -75,20 +73,49 @@ app.post('/api/quizzes', (req, res) => {
     return res.status(400).json({ message: 'Title and subdomain are required.' });
   }
 
-  const newQuiz = {
+  const existingIdx = quizzes.findIndex((q) => q.subdomain === subdomain);
+
+  const quizData = {
     id: Date.now().toString(),
     title,
     subdomain,
     timeLimitMinutes: Number(timeLimitMinutes) || 15,
     passcode: passcode ? passcode.trim() : '',
+    status: 'draft', // Initial status: draft, active, or ended
     questions: questions || []
   };
 
-  quizzes.push(newQuiz);
-  res.status(201).json({ message: 'Quiz published successfully!', quiz: newQuiz });
+  if (existingIdx !== -1) {
+    quizzes[existingIdx] = { ...quizzes[existingIdx], ...quizData };
+  } else {
+    quizzes.push(quizData);
+  }
+
+  res.status(201).json({ message: 'Quiz saved successfully!', quiz: quizData });
 });
 
-// 2. Fetch Quiz by Subdomain/Slug
+// 2. Fetch All Quizzes for Admin Dashboard
+app.get('/api/admin/quizzes', (req, res) => {
+  res.json(quizzes);
+});
+
+// 3. Update Quiz Status (Start / End Test)
+app.post('/api/admin/quizzes/:subdomain/status', (req, res) => {
+  const { subdomain } = req.params;
+  const { status } = req.body; // 'active' or 'ended'
+
+  const quiz = quizzes.find((q) => q.subdomain === subdomain);
+  if (!quiz) {
+    return res.status(404).json({ message: 'Quiz not found' });
+  }
+
+  quiz.status = status;
+  io.emit('quiz_status_changed', { subdomain, status });
+
+  res.json({ message: `Quiz status updated to ${status}`, quiz });
+});
+
+// 4. Fetch Quiz Details for Participants
 app.get('/api/quizzes/:subdomain', (req, res) => {
   const { subdomain } = req.params;
   const quiz = quizzes.find((q) => q.subdomain === subdomain);
@@ -103,11 +130,12 @@ app.get('/api/quizzes/:subdomain', (req, res) => {
     subdomain: quiz.subdomain,
     timeLimitMinutes: quiz.timeLimitMinutes,
     passcode: quiz.passcode || '',
+    status: quiz.status || 'active',
     questions: quiz.questions
   });
 });
 
-// 3. Submit Quiz Responses
+// 5. Submit Answers
 app.post('/api/quizzes/:subdomain/submit', (req, res) => {
   const { subdomain } = req.params;
   const { respondentName, answers, focusLossCount } = req.body;
@@ -115,6 +143,10 @@ app.post('/api/quizzes/:subdomain/submit', (req, res) => {
   const quiz = quizzes.find((q) => q.subdomain === subdomain);
   if (!quiz) {
     return res.status(404).json({ message: 'Quiz not found' });
+  }
+
+  if (quiz.status === 'ended') {
+    return res.status(403).json({ message: 'This assessment has already ended.' });
   }
 
   let score = 0;
@@ -153,7 +185,7 @@ app.post('/api/quizzes/:subdomain/submit', (req, res) => {
   });
 });
 
-// 4. Fetch Results for Admin
+// 6. Fetch Admin Results
 app.get('/api/admin/results', (req, res) => {
   res.json(results);
 });
