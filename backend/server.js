@@ -1,18 +1,4 @@
 // server.js
-// Add at top of server.js
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'Abhi@1103'; // Default password: admin123
-
-// POST /api/admin/login
-app.post('/api/admin/login', (req, res) => {
-  const { password } = req.body;
-
-  if (password === ADMIN_PASSWORD) {
-    // Returns a session token upon correct password
-    return res.json({ success: true, token: 'admin-session-active-token' });
-  }
-
-  return res.status(401).json({ success: false, message: 'Incorrect Admin Password!' });
-});
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
