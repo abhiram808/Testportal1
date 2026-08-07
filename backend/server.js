@@ -7,6 +7,7 @@ const cors = require('cors');
 const app = express();
 const server = http.createServer(app);
 
+// Middleware
 app.use(cors());
 app.use(express.json());
 
@@ -15,6 +16,7 @@ const quizzes = [];
 const activeSessions = [];
 const results = [];
 
+// Socket.io Setup
 const io = new Server(server, {
   cors: {
     origin: '*',
@@ -63,9 +65,11 @@ io.on('connection', (socket) => {
   });
 });
 
-// --- API ENDPOINTS ---
+// ==========================================
+// API ENDPOINTS
+// ==========================================
 
-// 1. Create & Save Quiz Questions
+// 1. Create Quiz
 app.post('/api/quizzes', (req, res) => {
   const { title, subdomain, timeLimitMinutes, passcode, questions } = req.body;
 
@@ -73,49 +77,26 @@ app.post('/api/quizzes', (req, res) => {
     return res.status(400).json({ message: 'Title and subdomain are required.' });
   }
 
-  const existingIdx = quizzes.findIndex((q) => q.subdomain === subdomain);
-
-  const quizData = {
+  const newQuiz = {
     id: Date.now().toString(),
     title,
     subdomain,
     timeLimitMinutes: Number(timeLimitMinutes) || 15,
     passcode: passcode ? passcode.trim() : '',
-    status: 'draft', // Initial status: draft, active, or ended
+    status: 'draft',
     questions: questions || []
   };
 
-  if (existingIdx !== -1) {
-    quizzes[existingIdx] = { ...quizzes[existingIdx], ...quizData };
-  } else {
-    quizzes.push(quizData);
-  }
-
-  res.status(201).json({ message: 'Quiz saved successfully!', quiz: quizData });
+  quizzes.push(newQuiz);
+  res.status(201).json({ message: 'Quiz published successfully!', quiz: newQuiz });
 });
 
-// 2. Fetch All Quizzes for Admin Dashboard
+// 2. Fetch All Quizzes (Admin Dashboard)
 app.get('/api/admin/quizzes', (req, res) => {
   res.json(quizzes);
 });
 
-// 3. Update Quiz Status (Start / End Test)
-app.post('/api/admin/quizzes/:subdomain/status', (req, res) => {
-  const { subdomain } = req.params;
-  const { status } = req.body; // 'active' or 'ended'
-
-  const quiz = quizzes.find((q) => q.subdomain === subdomain);
-  if (!quiz) {
-    return res.status(404).json({ message: 'Quiz not found' });
-  }
-
-  quiz.status = status;
-  io.emit('quiz_status_changed', { subdomain, status });
-
-  res.json({ message: `Quiz status updated to ${status}`, quiz });
-});
-
-// 4. Fetch Quiz Details for Participants
+// 3. Fetch Single Quiz (Participant View)
 app.get('/api/quizzes/:subdomain', (req, res) => {
   const { subdomain } = req.params;
   const quiz = quizzes.find((q) => q.subdomain === subdomain);
@@ -130,12 +111,96 @@ app.get('/api/quizzes/:subdomain', (req, res) => {
     subdomain: quiz.subdomain,
     timeLimitMinutes: quiz.timeLimitMinutes,
     passcode: quiz.passcode || '',
-    status: quiz.status || 'active',
+    status: quiz.status || 'draft',
     questions: quiz.questions
   });
 });
 
-// 5. Submit Answers
+// 4. Update Quiz Status (Start / End Test)
+app.post('/api/admin/quizzes/:subdomain/status', (req, res) => {
+  const { subdomain } = req.params;
+  const { status } = req.body;
+
+  const quiz = quizzes.find((q) => q.subdomain === subdomain);
+  if (!quiz) {
+    return res.status(404).json({ message: 'Quiz not found' });
+  }
+
+  quiz.status = status;
+  io.emit('quiz_status_changed', { subdomain, status });
+
+  res.json({ message: `Quiz status updated to ${status}`, quiz });
+});
+
+// ------------------------------------------
+// 🌟 4 NEW MANAGEMENT ENDPOINTS
+// ------------------------------------------
+
+// 5. EDIT QUIZ (PUT)
+app.put('/api/admin/quizzes/:subdomain', (req, res) => {
+  const { subdomain } = req.params;
+  const { title, timeLimitMinutes, passcode, questions } = req.body;
+
+  const quizIdx = quizzes.findIndex((q) => q.subdomain === subdomain);
+  if (quizIdx === -1) {
+    return res.status(404).json({ message: 'Quiz not found' });
+  }
+
+  quizzes[quizIdx] = {
+    ...quizzes[quizIdx],
+    title: title || quizzes[quizIdx].title,
+    timeLimitMinutes: Number(timeLimitMinutes) || quizzes[quizIdx].timeLimitMinutes,
+    passcode: passcode !== undefined ? passcode.trim() : quizzes[quizIdx].passcode,
+    questions: questions || quizzes[quizIdx].questions
+  };
+
+  res.json({ message: 'Quiz updated successfully!', quiz: quizzes[quizIdx] });
+});
+
+// 6. RESTART TEST
+app.post('/api/admin/quizzes/:subdomain/restart', (req, res) => {
+  const { subdomain } = req.params;
+  const quiz = quizzes.find((q) => q.subdomain === subdomain);
+
+  if (!quiz) {
+    return res.status(404).json({ message: 'Quiz not found' });
+  }
+
+  quiz.status = 'active';
+  io.emit('quiz_status_changed', { subdomain, status: 'active' });
+
+  res.json({ message: 'Test restarted successfully!', quiz });
+});
+
+// 7. DELETE QUIZ
+app.delete('/api/admin/quizzes/:subdomain', (req, res) => {
+  const { subdomain } = req.params;
+  const quizIdx = quizzes.findIndex((q) => q.subdomain === subdomain);
+
+  if (quizIdx === -1) {
+    return res.status(404).json({ message: 'Quiz not found' });
+  }
+
+  quizzes.splice(quizIdx, 1);
+  res.json({ message: 'Quiz deleted successfully!' });
+});
+
+// 8. DELETE SINGLE RESULT
+app.delete('/api/admin/results/:id', (req, res) => {
+  const { id } = req.params;
+  const resultIdx = results.findIndex((r) => r.id === id);
+
+  if (resultIdx === -1) {
+    return res.status(404).json({ message: 'Result record not found' });
+  }
+
+  results.splice(resultIdx, 1);
+  res.json({ message: 'Result deleted successfully!' });
+});
+
+// ------------------------------------------
+
+// 9. Submit Quiz Answers
 app.post('/api/quizzes/:subdomain/submit', (req, res) => {
   const { subdomain } = req.params;
   const { respondentName, answers, focusLossCount } = req.body;
@@ -146,7 +211,7 @@ app.post('/api/quizzes/:subdomain/submit', (req, res) => {
   }
 
   if (quiz.status === 'ended') {
-    return res.status(403).json({ message: 'This assessment has already ended.' });
+    return res.status(403).json({ message: 'This assessment has ended.' });
   }
 
   let score = 0;
@@ -185,7 +250,7 @@ app.post('/api/quizzes/:subdomain/submit', (req, res) => {
   });
 });
 
-// 6. Fetch Admin Results
+// 10. Fetch Results (Admin)
 app.get('/api/admin/results', (req, res) => {
   res.json(results);
 });
