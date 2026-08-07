@@ -1,8 +1,8 @@
 // frontend/src/App.jsx
 import React from 'react';
 import { BrowserRouter, Routes, Route, useSearchParams, useParams } from 'react-router-dom';
-import Admin from './Admin.jsx';
-import Quiz from './Quiz.jsx';
+import Admin from './admin.jsx';
+import Quiz from './quiz.jsx';
 
 // Wrapper to handle quiz param or path parameter
 function QuizWrapper() {
