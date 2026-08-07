@@ -124,40 +124,57 @@ export default function Quiz({ subdomain }) {
   }
 
   return (
-    
+    <div className="max-w-3xl mx-auto my-8 p-6 bg-white rounded-xl shadow-sm border border-slate-200 space-y-6">
+      {/* Violation Alert Banner */}
       {focusLossCount > 0 && (
-        
+        <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 font-medium text-sm">
           ⚠️ Warning: Tab switch detected! (Total violations: {focusLossCount})
-        
+        </div>
       )}
 
-      
-        
-          {quiz.title}
-          Respondent: {respondentName}
-        
+      {/* Quiz Header */}
+      <div className="border-b border-slate-200 pb-4">
+        <h1 className="text-2xl font-bold text-slate-800">{quiz.title}</h1>
+        <p className="text-sm text-slate-500">Respondent: {respondentName}</p>
+      </div>
 
-        {quiz.questions.map((q, idx) => (
-          
-            
+      {/* Questions List */}
+      <div className="space-y-6">
+        {quiz.questions && quiz.questions.map((q, idx) => (
+          <div key={q.id || idx} className="p-4 border border-slate-200 rounded-lg bg-slate-50 space-y-3">
+            <p className="font-semibold text-slate-800">
               {idx + 1}. {q.text}
-            
-            
-              {q.options.map((opt, optIdx) => (
-                
-                   setAnswers({ ...answers, [q.id]: optIdx })}
-                  />
-                  {opt}
-                
-              ))}
-            
-          
-        ))}
+            </p>
 
-        
-          Submit Answers
-        
-      
-    
+            <div className="space-y-2">
+              {q.options && q.options.map((opt, optIdx) => (
+                <label
+                  key={optIdx}
+                  className="flex items-center space-x-3 p-2 bg-white rounded border border-slate-200 hover:bg-slate-100 cursor-pointer text-sm"
+                >
+                  <input
+                    type="radio"
+                    name={`question-${idx}`}
+                    checked={answers[q.id || idx] === optIdx}
+                    onChange={() => setAnswers({ ...answers, [q.id || idx]: optIdx })}
+                    className="text-indigo-600 focus:ring-indigo-500"
+                  />
+                  <span className="text-slate-700">{opt}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Submit Button */}
+      <button
+        type="button"
+        onClick={handleSubmit}
+        className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-md shadow transition"
+      >
+        Submit Answers
+      </button>
+    </div>
   );
 }
