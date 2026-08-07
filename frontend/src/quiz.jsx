@@ -84,26 +84,42 @@ export default function Quiz({ subdomain }) {
 
   if (!hasStarted) {
     return (
-      
-        {quiz.title}
-        Time Limit: {quiz.timeLimitMinutes} minutes
-        
-        
-          Notice: This test is proctored in real time. Switching tabs or leaving this browser window will log a violation and alert the exam host.
-        
+      <div className="max-w-md mx-auto my-12 p-6 bg-white rounded-xl shadow-sm border border-slate-200 space-y-6">
+        <div className="space-y-1">
+          <h1 className="text-2xl font-bold text-slate-800">{quiz.title}</h1>
+          <p className="text-sm font-medium text-slate-500">
+            Time Limit: {quiz.timeLimitMinutes} minutes
+          </p>
+        </div>
 
-        
-          Full Name
-           setRespondentName(e.target.value)}
+        <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg text-amber-800 text-sm">
+          <p className="font-semibold mb-1">Proctoring Notice</p>
+          <p>
+            This test is proctored in real time. Switching tabs or leaving this browser window will log a violation and alert the exam host.
+          </p>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-1">
+            Full Name
+          </label>
+          <input
+            type="text"
+            value={respondentName}
+            onChange={(e) => setRespondentName(e.target.value)}
             placeholder="John Doe"
             className="mt-1 w-full border border-slate-300 rounded p-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
           />
-        
+        </div>
 
-        
+        <button
+          type="button"
+          onClick={handleStart}
+          className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-md shadow transition"
+        >
           Start Assessment
-        
-      
+        </button>
+      </div>
     );
   }
 
