@@ -1,42 +1,74 @@
-// backend/server.js
+// server.js (or index.js in your backend folder)
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
 
 const app = express();
+const server = http.createServer(app);
 
+// Middleware
 app.use(cors());
 app.use(express.json());
 
-const server = http.createServer(app);
+// In-Memory Data Stores
+const quizzes = [];
+const activeSessions = [];
+const results = [];
+
+// Socket.io Setup
 const io = new Server(server, {
   cors: {
-    origin: '*', // Allows connections from local or deployed frontends
+    origin: '*',
     methods: ['GET', 'POST']
   }
 });
 
-const db = {
-  quizzes: {
-    'math-101': {
-      id: 'math-101',
-      subdomain: 'math-101',
-      title: 'Algebra Fundamentals Midterm',
-      timeLimitMinutes: 15,
-      questions: [
-        { id: 1, text: 'Solve for x: 2x + 5 = 15', options: ['x = 5', 'x = 10', 'x = 3', 'x = 0'], correct: 0 },
-        { id: 2, text: 'What is the square root of 64?', options: ['6', '7', '8', '9'], correct: 2 }
-      ]
+io.on('connection', (socket) => {
+  console.log('Client connected:', socket.id);
+
+  socket.on('start_session', ({ subdomain, respondentName }) => {
+    const existing = activeSessions.find(
+      (s) => s.respondentName === respondentName && s.quizId === subdomain
+    );
+    if (!existing) {
+      activeSessions.push({
+        socketId: socket.id,
+        respondentName,
+        quizId: subdomain,
+        status: 'Active',
+        focusLossCount: 0
+      });
     }
-  },
-  sessions: {},
-  results: []
-};
+    io.emit('active_sessions_update', activeSessions);
+  });
 
+  socket.on('tab_switch_detected', ({ subdomain, respondentName, focusLossCount, timestamp }) => {
+    const session = activeSessions.find(
+      (s) => s.respondentName === respondentName && s.quizId === subdomain
+    );
+    if (session) {
+      session.focusLossCount = focusLossCount;
+      io.emit('active_sessions_update', activeSessions);
+    }
+
+    io.emit('proctor_alert', {
+      respondentName,
+      subdomain,
+      focusLossCount,
+      timestamp
+    });
+  });
+
+  socket.on('disconnect', () => {
+    console.log('Client disconnected:', socket.id);
+  });
+});
+
+// --- API ENDPOINTS ---
+
+// 1. Create Quiz (with Passcode support)
 app.post('/api/quizzes', (req, res) => {
-  console.log('Incoming Quiz Data:', req.body); // 👈 Debug log
-
   const { title, subdomain, timeLimitMinutes, passcode, questions } = req.body;
 
   if (!title || !subdomain) {
@@ -53,25 +85,10 @@ app.post('/api/quizzes', (req, res) => {
   };
 
   quizzes.push(newQuiz);
-
-  console.log('Saved Quiz:', newQuiz); // 👈 Debug log
-  res.status(201).json({ message: 'Quiz created successfully', quiz: newQuiz });
+  res.status(201).json({ message: 'Quiz published successfully!', quiz: newQuiz });
 });
 
-// GET /api/quizzes/:subdomain - Fetch Quiz
-app.get('/api/quizzes/:subdomain', (req, res) => {
-  const { subdomain } = req.params;
-  const quiz = quizzes.find((q) => q.subdomain === subdomain);
-
-  if (!quiz) {
-    return res.status(404).json({ message: 'Quiz not found' });
-  }
-
-  console.log('Sending Quiz to Participant:', quiz); // 👈 Debug log
-  res.json(quiz);
-});
-
-// GET /api/quizzes/:subdomain - Fetch quiz by subdomain
+// 2. Fetch Quiz by Subdomain/Slug
 app.get('/api/quizzes/:subdomain', (req, res) => {
   const { subdomain } = req.params;
   const quiz = quizzes.find((q) => q.subdomain === subdomain);
@@ -90,116 +107,59 @@ app.get('/api/quizzes/:subdomain', (req, res) => {
   });
 });
 
-  const newQuiz = { 
-    id: subdomain, 
-    subdomain, 
-    title, 
-    timeLimitMinutes: Number(timeLimitMinutes) || 15, 
-    questions 
-  };
-  
-  db.quizzes[subdomain] = newQuiz;
-  return res.status(201).json({ message: 'Quiz published successfully', quiz: newQuiz });
-});
-
-app.get('/api/quizzes/:subdomain', (req, res) => {
-  const quiz = db.quizzes[req.params.subdomain];
-  if (!quiz) {
-    return res.status(404).json({ error: 'Quiz not found' });
-  }
-
-  const safeQuiz = {
-    ...quiz,
-    questions: quiz.questions.map(({ correct, ...q }) => q)
-  };
-  
-  res.json(safeQuiz);
-});
-
-app.get('/api/admin/results', (req, res) => {
-  res.json(db.results);
-});
-
+// 3. Submit Quiz Responses
 app.post('/api/quizzes/:subdomain/submit', (req, res) => {
-  const quiz = db.quizzes[req.params.subdomain];
-  if (!quiz) {
-    return res.status(404).json({ error: 'Quiz not found' });
-  }
-
+  const { subdomain } = req.params;
   const { respondentName, answers, focusLossCount } = req.body;
 
+  const quiz = quizzes.find((q) => q.subdomain === subdomain);
+  if (!quiz) {
+    return res.status(404).json({ message: 'Quiz not found' });
+  }
+
   let score = 0;
-  quiz.questions.forEach((q) => {
-    if (answers && answers[q.id] === q.correct) {
-      score += 1;
-    }
-  });
+  if (quiz.questions && Array.isArray(quiz.questions)) {
+    quiz.questions.forEach((q, idx) => {
+      const questionKey = q.id !== undefined ? q.id : idx;
+      if (answers && answers[questionKey] === q.correct) {
+        score += 1;
+      }
+    });
+  }
+
+  const totalQuestions = quiz.questions ? quiz.questions.length : 0;
+  const percentage = totalQuestions > 0 ? Math.round((score / totalQuestions) * 100) : 0;
 
   const resultRecord = {
     id: Date.now().toString(),
-    quizId: quiz.id,
+    respondentName: respondentName || 'Anonymous',
     quizTitle: quiz.title,
-    respondentName,
+    subdomain,
     score,
-    totalQuestions: quiz.questions.length,
-    percentage: ((score / quiz.questions.length) * 100).toFixed(1),
+    totalQuestions,
+    percentage,
     focusLossCount: focusLossCount || 0,
     submittedAt: new Date().toISOString()
   };
 
-  db.results.push(resultRecord);
+  results.push(resultRecord);
   io.emit('admin_result_update', resultRecord);
 
-  res.json({ message: 'Submission recorded', result: resultRecord });
-});
-
-io.on('connection', (socket) => {
-  console.log(`[Socket Connected]: ${socket.id}`);
-
-  socket.on('start_session', ({ quizId, respondentName }) => {
-    db.sessions[socket.id] = {
-      socketId: socket.id,
-      quizId,
-      respondentName,
-      status: 'Active',
-      focusLossCount: 0,
-      startedAt: new Date()
-    };
-
-    socket.join(`quiz_${quizId}`);
-    io.emit('active_sessions_update', Object.values(db.sessions));
-  });
-
-  socket.on('focus_lost', () => {
-    if (db.sessions[socket.id]) {
-      db.sessions[socket.id].focusLossCount += 1;
-      db.sessions[socket.id].status = 'Warning: Tab Switched!';
-
-      io.emit('proctor_alert', {
-        respondentName: db.sessions[socket.id].respondentName,
-        focusLossCount: db.sessions[socket.id].focusLossCount,
-        socketId: socket.id,
-        timestamp: new Date().toLocaleTimeString()
-      });
-
-      io.emit('active_sessions_update', Object.values(db.sessions));
-    }
-  });
-
-  socket.on('focus_gained', () => {
-    if (db.sessions[socket.id]) {
-      db.sessions[socket.id].status = 'Active';
-      io.emit('active_sessions_update', Object.values(db.sessions));
-    }
-  });
-
-  socket.on('disconnect', () => {
-    delete db.sessions[socket.id];
-    io.emit('active_sessions_update', Object.values(db.sessions));
+  res.json({
+    score,
+    totalQuestions,
+    percentage,
+    message: 'Submission received successfully'
   });
 });
 
+// 4. Fetch Results for Admin
+app.get('/api/admin/results', (req, res) => {
+  res.json(results);
+});
+
+// Start Server
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {
-  console.log(`Backend server listening on port ${PORT}`);
+  console.log(`Server running on port ${PORT}`);
 });
