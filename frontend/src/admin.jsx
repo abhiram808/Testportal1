@@ -7,12 +7,14 @@ const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
 const socket = io(BACKEND_URL);
 
 export default function Admin() {
-  const [tab, setTab] = useState('manage'); // 'create', 'manage', 'live', 'results'
+  const [tab, setTab] = useState('manage'); // 'manage', 'create', 'live', 'results'
   const [quizzesList, setQuizzesList] = useState([]);
   const [activeSessions, setActiveSessions] = useState([]);
   const [results, setResults] = useState([]);
   const [alerts, setAlerts] = useState([]);
 
+  // Form State
+  const [editingSubdomain, setEditingSubdomain] = useState(null); // Null = creating, String = editing
   const [title, setTitle] = useState('');
   const [subdomainInput, setSubdomainInput] = useState('');
   const [timeLimit, setTimeLimit] = useState(15);
@@ -28,13 +30,16 @@ export default function Admin() {
       .catch((err) => console.error('Error fetching quizzes:', err));
   };
 
-  useEffect(() => {
-    fetchQuizzes();
-
+  const fetchResults = () => {
     fetch(`${BACKEND_URL}/api/admin/results`)
       .then((res) => res.json())
       .then((data) => setResults(data))
       .catch((err) => console.error('Error loading results:', err));
+  };
+
+  useEffect(() => {
+    fetchQuizzes();
+    fetchResults();
 
     socket.on('active_sessions_update', (sessions) => setActiveSessions(sessions));
     socket.on('proctor_alert', (alert) => setAlerts((prev) => [alert, ...prev]));
@@ -47,6 +52,115 @@ export default function Admin() {
     };
   }, []);
 
+  // Reset Form
+  const resetForm = () => {
+    setEditingSubdomain(null);
+    setTitle('');
+    setSubdomainInput('');
+    setTimeLimit(15);
+    setPasscode('');
+    setQuestions([{ id: 1, text: '', options: ['', '', '', ''], correct: 0 }]);
+  };
+
+  // 1. Populate Form for Editing
+  const handleEditQuiz = (quiz) => {
+    setEditingSubdomain(quiz.subdomain);
+    setTitle(quiz.title);
+    setSubdomainInput(quiz.subdomain);
+    setTimeLimit(quiz.timeLimitMinutes || 15);
+    setPasscode(quiz.passcode || '');
+    setQuestions(quiz.questions || [{ id: 1, text: '', options: ['', '', '', ''], correct: 0 }]);
+    setTab('create');
+  };
+
+  // 2. Save or Update Quiz
+  const handleSaveQuiz = async () => {
+    if (!title || !subdomainInput) {
+      alert('Please fill in both Title and Subdomain.');
+      return;
+    }
+
+    const endpoint = editingSubdomain
+      ? `${BACKEND_URL}/api/admin/quizzes/${editingSubdomain}`
+      : `${BACKEND_URL}/api/quizzes`;
+
+    const method = editingSubdomain ? 'PUT' : 'POST';
+
+    const res = await fetch(endpoint, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title,
+        subdomain: subdomainInput,
+        timeLimitMinutes: Number(timeLimit),
+        passcode,
+        questions
+      })
+    });
+
+    if (res.ok) {
+      alert(editingSubdomain ? 'Quiz Updated Successfully!' : 'Quiz Created Successfully!');
+      resetForm();
+      fetchQuizzes();
+      setTab('manage');
+    } else {
+      alert('Failed to save quiz.');
+    }
+  };
+
+  // 3. Restart Quiz
+  const handleRestartQuiz = async (subdomain) => {
+    if (!window.confirm('Are you sure you want to restart this test? Participants can take it again.')) return;
+
+    const res = await fetch(`${BACKEND_URL}/api/admin/quizzes/${subdomain}/restart`, {
+      method: 'POST'
+    });
+
+    if (res.ok) {
+      alert('Test restarted!');
+      fetchQuizzes();
+    }
+  };
+
+  // 4. Update Status (Start / End)
+  const handleUpdateStatus = async (subdomain, newStatus) => {
+    const res = await fetch(`${BACKEND_URL}/api/admin/quizzes/${subdomain}/status`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: newStatus })
+    });
+
+    if (res.ok) fetchQuizzes();
+  };
+
+  // 5. Delete Entire Quiz
+  const handleDeleteQuiz = async (subdomain) => {
+    if (!window.confirm(`Are you sure you want to delete quiz "?quiz=${subdomain}"?`)) return;
+
+    const res = await fetch(`${BACKEND_URL}/api/admin/quizzes/${subdomain}`, {
+      method: 'DELETE'
+    });
+
+    if (res.ok) {
+      alert('Quiz deleted!');
+      fetchQuizzes();
+    }
+  };
+
+  // 6. Delete Specific Result
+  const handleDeleteResult = async (id) => {
+    if (!window.confirm('Delete this respondent record?')) return;
+
+    const res = await fetch(`${BACKEND_URL}/api/admin/results/${id}`, {
+      method: 'DELETE'
+    });
+
+    if (res.ok) {
+      fetchResults();
+    }
+  };
+
+  // DOCX Parser Logic
   const handleDocxUpload = (event) => {
     const file = event.target.files[0];
     if (!file) return;
@@ -61,10 +175,10 @@ export default function Admin() {
           setQuestions(parsedQuestions);
           alert(`Imported ${parsedQuestions.length} questions from Word doc!`);
         } else {
-          alert('Could not detect any questions in document.');
+          alert('Could not detect questions in file.');
         }
       } catch (error) {
-        alert('Error reading Word file.');
+        alert('Error parsing Word doc.');
       }
     };
     reader.readAsArrayBuffer(file);
@@ -94,73 +208,28 @@ export default function Admin() {
         currentQ.options.push(optMatch[1]);
       } else if (qMatch) {
         if (currentQ) parsed.push(currentQ);
-        currentQ = {
-          id: parsed.length + 1,
-          text: qMatch[1],
-          options: [],
-          correct: 0
-        };
+        currentQ = { id: parsed.length + 1, text: qMatch[1], options: [], correct: 0 };
       }
     });
 
     if (currentQ) parsed.push(currentQ);
     return parsed.map((q) => {
-      while (q.options.length < 4) {
-        q.options.push(`Option ${q.options.length + 1}`);
-      }
+      while (q.options.length < 4) q.options.push(`Option ${q.options.length + 1}`);
       return q;
     });
   };
 
-  const handleSaveQuiz = async () => {
-    if (!title || !subdomainInput) {
-      alert('Please fill in both Title and Subdomain.');
-      return;
-    }
-
-    const res = await fetch(`${BACKEND_URL}/api/quizzes`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        title,
-        subdomain: subdomainInput,
-        timeLimitMinutes: Number(timeLimit),
-        passcode,
-        questions
-      })
-    });
-
-    if (res.ok) {
-      alert(`Quiz Saved Successfully!`);
-      setTitle('');
-      setSubdomainInput('');
-      setPasscode('');
-      setQuestions([{ id: 1, text: '', options: ['', '', '', ''], correct: 0 }]);
-      fetchQuizzes();
-      setTab('manage');
-    }
-  };
-
-  const handleUpdateStatus = async (subdomain, newStatus) => {
-    const res = await fetch(`${BACKEND_URL}/api/admin/quizzes/${subdomain}/status`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: newStatus })
-    });
-
-    if (res.ok) {
-      fetchQuizzes();
-    }
-  };
-
   return (
     <div className="max-w-6xl mx-auto p-6 bg-white rounded-xl shadow-sm border border-slate-200 my-6">
-      {/* Tabs */}
+      {/* Navigation Tabs */}
       <div className="flex space-x-8 border-b border-slate-200 mb-6">
         {['manage', 'create', 'live', 'results'].map((t) => (
           <button
             key={t}
-            onClick={() => setTab(t)}
+            onClick={() => {
+              if (t === 'create' && !editingSubdomain) resetForm();
+              setTab(t);
+            }}
             className={`pb-3 px-1 capitalize font-medium text-sm border-b-2 transition ${
               tab === t
                 ? 'border-indigo-600 text-indigo-600'
@@ -170,7 +239,9 @@ export default function Admin() {
             {t === 'manage'
               ? 'Manage Tests'
               : t === 'create'
-              ? 'Create Quiz'
+              ? editingSubdomain
+                ? 'Edit Quiz'
+                : 'Create Quiz'
               : t === 'live'
               ? 'Live Monitor'
               : 'Results'}
@@ -178,16 +249,19 @@ export default function Admin() {
         ))}
       </div>
 
-      {/* Tab 1: Manage Quizzes (Start / End Controls) */}
+      {/* Tab 1: Manage Tests */}
       {tab === 'manage' && (
         <div className="space-y-4">
           <div className="flex justify-between items-center">
-            <h2 className="text-xl font-bold text-slate-800">Published Assessments</h2>
+            <h2 className="text-xl font-bold text-slate-800">Assessments List</h2>
             <button
-              onClick={() => setTab('create')}
+              onClick={() => {
+                resetForm();
+                setTab('create');
+              }}
               className="px-4 py-2 bg-indigo-600 text-white rounded-md text-sm font-semibold hover:bg-indigo-700"
             >
-              + New Quiz
+              + Create New Quiz
             </button>
           </div>
 
@@ -196,7 +270,7 @@ export default function Admin() {
               <thead className="bg-slate-100 text-slate-700 font-semibold border-b border-slate-200">
                 <tr>
                   <th className="p-3">Quiz Title</th>
-                  <th className="p-3">Subdomain Link</th>
+                  <th className="p-3">Slug Link</th>
                   <th className="p-3">Status</th>
                   <th className="p-3 text-right">Actions</th>
                 </tr>
@@ -210,11 +284,9 @@ export default function Admin() {
                   </tr>
                 ) : (
                   quizzesList.map((q) => (
-                    <tr key={q.id} className="hover:bg-slate-50">
+                    <tr key={q.id || q.subdomain} className="hover:bg-slate-50">
                       <td className="p-3 font-semibold text-slate-800">{q.title}</td>
-                      <td className="p-3 text-indigo-600 font-mono text-xs">
-                        ?quiz={q.subdomain}
-                      </td>
+                      <td className="p-3 text-indigo-600 font-mono text-xs">?quiz={q.subdomain}</td>
                       <td className="p-3">
                         <span
                           className={`px-2.5 py-1 rounded-full text-xs font-semibold uppercase ${
@@ -228,23 +300,46 @@ export default function Admin() {
                           {q.status || 'draft'}
                         </span>
                       </td>
-                      <td className="p-3 text-right space-x-2">
-                        {q.status !== 'active' && (
+                      <td className="p-3 text-right space-x-1.5">
+                        {/* Start / End / Restart Actions */}
+                        {q.status !== 'active' ? (
                           <button
                             onClick={() => handleUpdateStatus(q.subdomain, 'active')}
-                            className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-xs font-medium"
+                            className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-xs font-medium"
                           >
-                            ▶ Start Test
+                            ▶ Start
                           </button>
-                        )}
-                        {q.status === 'active' && (
+                        ) : (
                           <button
                             onClick={() => handleUpdateStatus(q.subdomain, 'ended')}
-                            className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white rounded text-xs font-medium"
+                            className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded text-xs font-medium"
                           >
-                            ⏹ End Test
+                            ⏹ End
                           </button>
                         )}
+
+                        <button
+                          onClick={() => handleRestartQuiz(q.subdomain)}
+                          className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs font-medium"
+                        >
+                          🔄 Restart
+                        </button>
+
+                        {/* Edit Action */}
+                        <button
+                          onClick={() => handleEditQuiz(q)}
+                          className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded text-xs font-medium"
+                        >
+                          ✏️ Edit
+                        </button>
+
+                        {/* Delete Action */}
+                        <button
+                          onClick={() => handleDeleteQuiz(q.subdomain)}
+                          className="px-2.5 py-1 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded text-xs font-medium"
+                        >
+                          🗑️ Delete
+                        </button>
                       </td>
                     </tr>
                   ))
@@ -255,19 +350,16 @@ export default function Admin() {
         </div>
       )}
 
-      {/* Tab 2: Create Quiz */}
+      {/* Tab 2: Create / Edit Form */}
       {tab === 'create' && (
         <div className="space-y-6">
           <div className="flex justify-between items-center">
-            <h2 className="text-xl font-bold text-slate-800">Prepare New Assessment</h2>
+            <h2 className="text-xl font-bold text-slate-800">
+              {editingSubdomain ? `Edit Quiz (${editingSubdomain})` : 'Prepare New Assessment'}
+            </h2>
             <label className="cursor-pointer bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-4 py-2 rounded-md text-sm font-semibold border border-indigo-200 transition">
               <span>📄 Import from Word (.docx)</span>
-              <input
-                type="file"
-                accept=".docx"
-                onChange={handleDocxUpload}
-                className="hidden"
-              />
+              <input type="file" accept=".docx" onChange={handleDocxUpload} className="hidden" />
             </label>
           </div>
 
@@ -287,12 +379,15 @@ export default function Admin() {
               <label className="block text-sm font-medium text-slate-700">Subdomain / Slug</label>
               <input
                 type="text"
+                disabled={!!editingSubdomain}
                 value={subdomainInput}
                 onChange={(e) =>
                   setSubdomainInput(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))
                 }
                 placeholder="physics-101"
-                className="mt-1 w-full border border-slate-300 rounded p-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                className={`mt-1 w-full border border-slate-300 rounded p-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none ${
+                  editingSubdomain ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : ''
+                }`}
               />
             </div>
 
@@ -381,13 +476,27 @@ export default function Admin() {
             </button>
           </div>
 
-          <button
-            type="button"
-            onClick={handleSaveQuiz}
-            className="w-full py-3 bg-indigo-600 text-white font-medium rounded-md shadow hover:bg-indigo-700"
-          >
-            Save Quiz
-          </button>
+          <div className="flex space-x-3">
+            <button
+              type="button"
+              onClick={handleSaveQuiz}
+              className="flex-1 py-3 bg-indigo-600 text-white font-medium rounded-md shadow hover:bg-indigo-700"
+            >
+              {editingSubdomain ? 'Update Quiz' : 'Save Quiz'}
+            </button>
+            {editingSubdomain && (
+              <button
+                type="button"
+                onClick={() => {
+                  resetForm();
+                  setTab('manage');
+                }}
+                className="px-6 py-3 bg-slate-100 text-slate-700 font-medium rounded-md border hover:bg-slate-200"
+              >
+                Cancel
+              </button>
+            )}
+          </div>
         </div>
       )}
 
@@ -395,7 +504,7 @@ export default function Admin() {
       {tab === 'live' && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 space-y-4">
-            <h3 className="text-lg font-bold text-slate-800">Active Respondents Monitor</h3>
+            <h3 className="text-lg font-bold text-slate-800">Active Respondents</h3>
             <div className="border border-slate-200 rounded-lg overflow-hidden">
               <table className="w-full text-left text-sm">
                 <thead className="bg-slate-100 text-slate-700 font-semibold border-b border-slate-200">
@@ -420,7 +529,7 @@ export default function Admin() {
 
           <div className="space-y-4">
             <h3 className="text-lg font-bold text-slate-800">Proctoring Alerts</h3>
-            <div className="border border-slate-200 rounded-lg p-4 bg-slate-50 space-y-3">
+            <div className="border border-slate-200 rounded-lg p-4 bg-slate-50 space-y-3 min-h-[200px]">
               {alerts.map((a, i) => (
                 <div key={i} className="p-3 bg-red-50 border border-red-200 rounded text-sm text-red-800">
                   <strong>{a.respondentName}</strong> switched tabs! ({a.focusLossCount} violations)
@@ -431,10 +540,10 @@ export default function Admin() {
         </div>
       )}
 
-      {/* Tab 4: Results */}
+      {/* Tab 4: Submissions & Result Deletion */}
       {tab === 'results' && (
         <div className="space-y-4">
-          <h3 className="text-lg font-bold text-slate-800">Submissions</h3>
+          <h3 className="text-lg font-bold text-slate-800">Submissions History</h3>
           <div className="border border-slate-200 rounded-lg overflow-hidden">
             <table className="w-full text-left text-sm">
               <thead className="bg-slate-100 text-slate-700 font-semibold border-b border-slate-200">
@@ -444,18 +553,35 @@ export default function Admin() {
                   <th className="p-3">Score</th>
                   <th className="p-3">Percentage</th>
                   <th className="p-3">Violations</th>
+                  <th className="p-3 text-right">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
-                {results.map((r, i) => (
-                  <tr key={i} className="hover:bg-slate-50">
-                    <td className="p-3 font-medium text-slate-800">{r.respondentName}</td>
-                    <td className="p-3 text-slate-600">{r.quizTitle}</td>
-                    <td className="p-3">{r.score} / {r.totalQuestions}</td>
-                    <td className="p-3 font-semibold text-indigo-600">{r.percentage}%</td>
-                    <td className="p-3 text-slate-700">{r.focusLossCount || 0}</td>
+                {results.length === 0 ? (
+                  <tr>
+                    <td colSpan="6" className="p-4 text-center text-slate-500">
+                      No results recorded yet.
+                    </td>
                   </tr>
-                ))}
+                ) : (
+                  results.map((r) => (
+                    <tr key={r.id} className="hover:bg-slate-50">
+                      <td className="p-3 font-medium text-slate-800">{r.respondentName}</td>
+                      <td className="p-3 text-slate-600">{r.quizTitle}</td>
+                      <td className="p-3">{r.score} / {r.totalQuestions}</td>
+                      <td className="p-3 font-semibold text-indigo-600">{r.percentage}%</td>
+                      <td className="p-3 text-slate-700">{r.focusLossCount || 0}</td>
+                      <td className="p-3 text-right">
+                        <button
+                          onClick={() => handleDeleteResult(r.id)}
+                          className="px-2.5 py-1 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded text-xs font-medium"
+                        >
+                          🗑️ Delete Result
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
