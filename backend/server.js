@@ -35,6 +35,8 @@ const db = {
 };
 
 app.post('/api/quizzes', (req, res) => {
+  console.log('Incoming Quiz Data:', req.body); // 👈 Debug log
+
   const { title, subdomain, timeLimitMinutes, passcode, questions } = req.body;
 
   if (!title || !subdomain) {
@@ -50,10 +52,23 @@ app.post('/api/quizzes', (req, res) => {
     questions: questions || []
   };
 
-  // Save to your database or array
   quizzes.push(newQuiz);
 
+  console.log('Saved Quiz:', newQuiz); // 👈 Debug log
   res.status(201).json({ message: 'Quiz created successfully', quiz: newQuiz });
+});
+
+// GET /api/quizzes/:subdomain - Fetch Quiz
+app.get('/api/quizzes/:subdomain', (req, res) => {
+  const { subdomain } = req.params;
+  const quiz = quizzes.find((q) => q.subdomain === subdomain);
+
+  if (!quiz) {
+    return res.status(404).json({ message: 'Quiz not found' });
+  }
+
+  console.log('Sending Quiz to Participant:', quiz); // 👈 Debug log
+  res.json(quiz);
 });
 
 // GET /api/quizzes/:subdomain - Fetch quiz by subdomain
