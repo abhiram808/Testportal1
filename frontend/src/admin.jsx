@@ -7,6 +7,14 @@ const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
 const socket = io(BACKEND_URL);
 
 export default function Admin() {
+  // Authentication State
+  const [isAuthenticated, setIsAuthenticated] = useState(() => {
+    return localStorage.getItem('admin_token') === 'admin-session-active-token';
+  });
+  const [loginPassword, setLoginPassword] = useState('');
+  const [loginError, setLoginError] = useState('');
+
+  // Dashboard State
   const [tab, setTab] = useState('manage'); // 'manage', 'create', 'live', 'results'
   const [quizzesList, setQuizzesList] = useState([]);
   const [activeSessions, setActiveSessions] = useState([]);
@@ -14,7 +22,7 @@ export default function Admin() {
   const [alerts, setAlerts] = useState([]);
 
   // Form State
-  const [editingSubdomain, setEditingSubdomain] = useState(null); // Null = creating, String = editing
+  const [editingSubdomain, setEditingSubdomain] = useState(null);
   const [title, setTitle] = useState('');
   const [subdomainInput, setSubdomainInput] = useState('');
   const [timeLimit, setTimeLimit] = useState(15);
@@ -22,6 +30,37 @@ export default function Admin() {
   const [questions, setQuestions] = useState([
     { id: 1, text: '', options: ['', '', '', ''], correct: 0 }
   ]);
+
+  // Handle Admin Login
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    setLoginError('');
+
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/admin/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: loginPassword })
+      });
+
+      const data = await res.json();
+
+      if (res.ok && data.success) {
+        localStorage.setItem('admin_token', data.token);
+        setIsAuthenticated(true);
+      } else {
+        setLoginError(data.message || 'Invalid Password');
+      }
+    } catch (err) {
+      setLoginError('Error connecting to backend server.');
+    }
+  };
+
+  // Handle Admin Logout
+  const handleLogout = () => {
+    localStorage.removeItem('admin_token');
+    setIsAuthenticated(false);
+  };
 
   const fetchQuizzes = () => {
     fetch(`${BACKEND_URL}/api/admin/quizzes`)
@@ -38,6 +77,8 @@ export default function Admin() {
   };
 
   useEffect(() => {
+    if (!isAuthenticated) return;
+
     fetchQuizzes();
     fetchResults();
 
@@ -50,9 +91,8 @@ export default function Admin() {
       socket.off('proctor_alert');
       socket.off('admin_result_update');
     };
-  }, []);
+  }, [isAuthenticated]);
 
-  // Reset Form
   const resetForm = () => {
     setEditingSubdomain(null);
     setTitle('');
@@ -62,7 +102,6 @@ export default function Admin() {
     setQuestions([{ id: 1, text: '', options: ['', '', '', ''], correct: 0 }]);
   };
 
-  // 1. Populate Form for Editing
   const handleEditQuiz = (quiz) => {
     setEditingSubdomain(quiz.subdomain);
     setTitle(quiz.title);
@@ -73,7 +112,6 @@ export default function Admin() {
     setTab('create');
   };
 
-  // 2. Save or Update Quiz
   const handleSaveQuiz = async () => {
     if (!title || !subdomainInput) {
       alert('Please fill in both Title and Subdomain.');
@@ -108,9 +146,8 @@ export default function Admin() {
     }
   };
 
-  // 3. Restart Quiz
   const handleRestartQuiz = async (subdomain) => {
-    if (!window.confirm('Are you sure you want to restart this test? Participants can take it again.')) return;
+    if (!window.confirm('Restart test? Participants will be able to submit responses again.')) return;
 
     const res = await fetch(`${BACKEND_URL}/api/admin/quizzes/${subdomain}/restart`, {
       method: 'POST'
@@ -122,7 +159,6 @@ export default function Admin() {
     }
   };
 
-  // 4. Update Status (Start / End)
   const handleUpdateStatus = async (subdomain, newStatus) => {
     const res = await fetch(`${BACKEND_URL}/api/admin/quizzes/${subdomain}/status`, {
       method: 'POST',
@@ -133,9 +169,8 @@ export default function Admin() {
     if (res.ok) fetchQuizzes();
   };
 
-  // 5. Delete Entire Quiz
   const handleDeleteQuiz = async (subdomain) => {
-    if (!window.confirm(`Are you sure you want to delete quiz "?quiz=${subdomain}"?`)) return;
+    if (!window.confirm(`Delete quiz "?quiz=${subdomain}" permanently?`)) return;
 
     const res = await fetch(`${BACKEND_URL}/api/admin/quizzes/${subdomain}`, {
       method: 'DELETE'
@@ -147,20 +182,16 @@ export default function Admin() {
     }
   };
 
-  // 6. Delete Specific Result
   const handleDeleteResult = async (id) => {
-    if (!window.confirm('Delete this respondent record?')) return;
+    if (!window.confirm('Delete this candidate score record?')) return;
 
     const res = await fetch(`${BACKEND_URL}/api/admin/results/${id}`, {
       method: 'DELETE'
     });
 
-    if (res.ok) {
-      fetchResults();
-    }
+    if (res.ok) fetchResults();
   };
 
-  // DOCX Parser Logic
   const handleDocxUpload = (event) => {
     const file = event.target.files[0];
     if (!file) return;
@@ -173,9 +204,9 @@ export default function Admin() {
         const parsedQuestions = parseQuizText(result.value);
         if (parsedQuestions.length > 0) {
           setQuestions(parsedQuestions);
-          alert(`Imported ${parsedQuestions.length} questions from Word doc!`);
+          alert(`Imported ${parsedQuestions.length} questions from Word document!`);
         } else {
-          alert('Could not detect questions in file.');
+          alert('Could not detect any questions.');
         }
       } catch (error) {
         alert('Error parsing Word doc.');
@@ -219,34 +250,93 @@ export default function Admin() {
     });
   };
 
+  // -------------------------------------------------------------
+  // SCREEN 1: SECURE ADMIN LOGIN SCREEN
+  // -------------------------------------------------------------
+  if (!isAuthenticated) {
+    return (
+      <div className="max-w-md mx-auto my-20 p-8 bg-white rounded-xl shadow-md border border-slate-200 space-y-6">
+        <div className="text-center space-y-2">
+          <div className="w-12 h-12 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center mx-auto text-2xl">
+            🔒
+          </div>
+          <h1 className="text-2xl font-bold text-slate-800">Admin Authentication</h1>
+          <p className="text-xs text-slate-500">Enter administrator password to access host panel</p>
+        </div>
+
+        {loginError && (
+          <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-xs text-center font-medium">
+            {loginError}
+          </div>
+        )}
+
+        <form onSubmit={handleLogin} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">
+              Admin Password
+            </label>
+            <input
+              type="password"
+              value={loginPassword}
+              onChange={(e) => setLoginPassword(e.target.value)}
+              placeholder="••••••••"
+              className="w-full border border-slate-300 rounded-md p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+              required
+            />
+            <p className="text-xs text-slate-400 mt-1">Default password: <code>admin123</code></p>
+          </div>
+
+          <button
+            type="submit"
+            className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-md shadow transition text-sm"
+          >
+            Unlock Dashboard
+          </button>
+        </form>
+      </div>
+    );
+  }
+
+  // -------------------------------------------------------------
+  // SCREEN 2: AUTHENTICATED ADMIN DASHBOARD
+  // -------------------------------------------------------------
   return (
     <div className="max-w-6xl mx-auto p-6 bg-white rounded-xl shadow-sm border border-slate-200 my-6">
-      {/* Navigation Tabs */}
-      <div className="flex space-x-8 border-b border-slate-200 mb-6">
-        {['manage', 'create', 'live', 'results'].map((t) => (
-          <button
-            key={t}
-            onClick={() => {
-              if (t === 'create' && !editingSubdomain) resetForm();
-              setTab(t);
-            }}
-            className={`pb-3 px-1 capitalize font-medium text-sm border-b-2 transition ${
-              tab === t
-                ? 'border-indigo-600 text-indigo-600'
-                : 'border-transparent text-slate-500 hover:text-slate-700'
-            }`}
-          >
-            {t === 'manage'
-              ? 'Manage Tests'
-              : t === 'create'
-              ? editingSubdomain
-                ? 'Edit Quiz'
-                : 'Create Quiz'
-              : t === 'live'
-              ? 'Live Monitor'
-              : 'Results'}
-          </button>
-        ))}
+      {/* Header Bar with Logout Button */}
+      <div className="flex justify-between items-center border-b border-slate-200 pb-4 mb-6">
+        <div className="flex space-x-6">
+          {['manage', 'create', 'live', 'results'].map((t) => (
+            <button
+              key={t}
+              onClick={() => {
+                if (t === 'create' && !editingSubdomain) resetForm();
+                setTab(t);
+              }}
+              className={`pb-1 capitalize font-semibold text-sm border-b-2 transition ${
+                tab === t
+                  ? 'border-indigo-600 text-indigo-600'
+                  : 'border-transparent text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              {t === 'manage'
+                ? 'Manage Tests'
+                : t === 'create'
+                ? editingSubdomain
+                  ? 'Edit Quiz'
+                  : 'Create Quiz'
+                : t === 'live'
+                ? 'Live Monitor'
+                : 'Results'}
+            </button>
+          ))}
+        </div>
+
+        <button
+          onClick={handleLogout}
+          className="px-3 py-1.5 text-xs font-semibold text-slate-600 hover:text-red-600 border border-slate-300 rounded hover:border-red-300 transition flex items-center space-x-1"
+        >
+          <span>🚪 Logout</span>
+        </button>
       </div>
 
       {/* Tab 1: Manage Tests */}
@@ -301,7 +391,6 @@ export default function Admin() {
                         </span>
                       </td>
                       <td className="p-3 text-right space-x-1.5">
-                        {/* Start / End / Restart Actions */}
                         {q.status !== 'active' ? (
                           <button
                             onClick={() => handleUpdateStatus(q.subdomain, 'active')}
@@ -325,7 +414,6 @@ export default function Admin() {
                           🔄 Restart
                         </button>
 
-                        {/* Edit Action */}
                         <button
                           onClick={() => handleEditQuiz(q)}
                           className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded text-xs font-medium"
@@ -333,7 +421,6 @@ export default function Admin() {
                           ✏️ Edit
                         </button>
 
-                        {/* Delete Action */}
                         <button
                           onClick={() => handleDeleteQuiz(q.subdomain)}
                           className="px-2.5 py-1 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded text-xs font-medium"
@@ -540,7 +627,7 @@ export default function Admin() {
         </div>
       )}
 
-      {/* Tab 4: Submissions & Result Deletion */}
+      {/* Tab 4: Submissions */}
       {tab === 'results' && (
         <div className="space-y-4">
           <h3 className="text-lg font-bold text-slate-800">Submissions History</h3>
