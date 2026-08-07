@@ -1,6 +1,7 @@
 // frontend/src/Admin.jsx
 import React, { useState, useEffect } from 'react';
 import { io } from 'socket.io-client';
+import mammoth from 'mammoth';
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
 const socket = io(BACKEND_URL);
@@ -35,6 +36,81 @@ export default function Admin() {
     };
   }, []);
 
+  // --- DOCX PARSER LOGIC ---
+  const handleDocxUpload = (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      try {
+        const arrayBuffer = e.target.result;
+        const result = await mammoth.extractRawText({ arrayBuffer });
+        const rawText = result.value;
+
+        const parsedQuestions = parseQuizText(rawText);
+        if (parsedQuestions.length > 0) {
+          setQuestions(parsedQuestions);
+          alert(`Successfully imported ${parsedQuestions.length} questions from Word document!`);
+        } else {
+          alert('Could not detect any questions. Please check the Word document format.');
+        }
+      } catch (error) {
+        console.error('Docx Parse Error:', error);
+        alert('Error reading Word document file.');
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  };
+
+  const parseQuizText = (text) => {
+    const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
+    const parsed = [];
+    let currentQ = null;
+
+    lines.forEach((line) => {
+      // Question Line (e.g., "1. What is...", "Q1: What is...")
+      const qMatch = line.match(/^(?:Q?\d+[\.\:]|\d+\.)\s*(.+)/i);
+      // Option Line (e.g., "A) Option", "A. Option", "1) Option")
+      const optMatch = line.match(/^(?:[A-D]\)|[A-D]\.|[1-4]\))\s*(.+)/i);
+      // Correct Answer Line (e.g., "Answer: A", "Ans: B", "Correct: C")
+      const ansMatch = line.match(/^(?:Answer|Ans|Correct|Correct Answer)\s*:\s*([A-D]|[1-4])/i);
+
+      if (ansMatch && currentQ) {
+        const letter = ansMatch[1].toUpperCase();
+        let correctIdx = 0;
+        if (letter === 'A' || letter === '1') correctIdx = 0;
+        else if (letter === 'B' || letter === '2') correctIdx = 1;
+        else if (letter === 'C' || letter === '3') correctIdx = 2;
+        else if (letter === 'D' || letter === '4') correctIdx = 3;
+
+        currentQ.correct = correctIdx;
+        parsed.push(currentQ);
+        currentQ = null;
+      } else if (optMatch && currentQ) {
+        currentQ.options.push(optMatch[1]);
+      } else if (qMatch) {
+        if (currentQ) parsed.push(currentQ);
+        currentQ = {
+          id: parsed.length + 1,
+          text: qMatch[1],
+          options: [],
+          correct: 0
+        };
+      }
+    });
+
+    if (currentQ) parsed.push(currentQ);
+
+    // Pad options if fewer than 4 were supplied
+    return parsed.map((q) => {
+      while (q.options.length < 4) {
+        q.options.push(`Option ${q.options.length + 1}`);
+      }
+      return q;
+    });
+  };
+
   const handleAddQuestion = () => {
     setQuestions([
       ...questions,
@@ -64,14 +140,12 @@ export default function Admin() {
       setTitle('');
       setSubdomainInput('');
       setQuestions([{ id: 1, text: '', options: ['', '', '', ''], correct: 0 }]);
-    } else {
-      alert('Failed to publish quiz. Please try again.');
     }
   };
 
   return (
     <div className="max-w-6xl mx-auto p-6 bg-white rounded-xl shadow-sm border border-slate-200 my-6">
-      {/* Navigation Tabs */}
+      {/* Tabs */}
       <div className="flex space-x-8 border-b border-slate-200 mb-6">
         {['create', 'live', 'results'].map((t) => (
           <button
@@ -95,7 +169,20 @@ export default function Admin() {
       {/* Tab 1: Create Quiz */}
       {tab === 'create' && (
         <div className="space-y-6">
-          <h2 className="text-xl font-bold text-slate-800">Prepare New Assessment</h2>
+          <div className="flex justify-between items-center">
+            <h2 className="text-xl font-bold text-slate-800">Prepare New Assessment</h2>
+            
+            {/* DOCX FILE UPLOAD BUTTON */}
+            <label className="cursor-pointer bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-4 py-2 rounded-md text-sm font-semibold border border-indigo-200 transition flex items-center space-x-2">
+              <span>📄 Import from Word (.docx)</span>
+              <input
+                type="file"
+                accept=".docx"
+                onChange={handleDocxUpload}
+                className="hidden"
+              />
+            </label>
+          </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
@@ -140,7 +227,7 @@ export default function Admin() {
             <h3 className="text-lg font-semibold text-slate-800">Questions Builder</h3>
 
             {questions.map((q, idx) => (
-              <div key={q.id} className="p-4 border border-slate-200 rounded-lg bg-slate-50 space-y-3">
+              <div key={q.id || idx} className="p-4 border border-slate-200 rounded-lg bg-slate-50 space-y-3">
                 <div className="flex items-center justify-between">
                   <span className="font-medium text-slate-700 text-sm">Question {idx + 1}</span>
                 </div>
@@ -251,7 +338,6 @@ export default function Admin() {
             </div>
           </div>
 
-          {/* Proctoring Alerts */}
           <div className="space-y-4">
             <h3 className="text-lg font-bold text-slate-800">Proctoring Alerts</h3>
             <div className="border border-slate-200 rounded-lg p-4 bg-slate-50 min-h-[250px] space-y-3">
@@ -262,11 +348,6 @@ export default function Admin() {
                   <div key={i} className="p-3 bg-red-50 border border-red-200 rounded-md text-sm text-red-800">
                     <div className="font-semibold">{a.respondentName} switched tabs!</div>
                     <div className="text-xs text-red-600">Violations count: {a.focusLossCount}</div>
-                    {a.timestamp && (
-                      <div className="text-xs text-slate-400 mt-1">
-                        {new Date(a.timestamp).toLocaleTimeString()}
-                      </div>
-                    )}
                   </div>
                 ))
               )}
