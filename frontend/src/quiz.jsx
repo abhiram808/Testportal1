@@ -181,7 +181,28 @@ export default function Quiz({ subdomain }) {
       </div>
     );
   }
+  // Screen: Test Status Check inside Quiz.jsx
+  if (quiz.status === 'draft') {
+    return (
+      <div className="max-w-md mx-auto my-12 p-6 bg-white rounded-xl border border-slate-200 text-center">
+        <h2 className="text-xl font-bold text-amber-600 mb-2">Test Not Started</h2>
+        <p className="text-slate-600 text-sm">
+          This assessment has not been started by the host yet. Please wait.
+        </p>
+      </div>
+    );
+  }
 
+  if (quiz.status === 'ended') {
+    return (
+      <div className="max-w-md mx-auto my-12 p-6 bg-white rounded-xl border border-slate-200 text-center">
+        <h2 className="text-xl font-bold text-red-600 mb-2">Test Closed</h2>
+        <p className="text-slate-600 text-sm">
+          This assessment is closed and is no longer accepting submissions.
+        </p>
+      </div>
+    );
+  }
   // Start Screen with Passcode Requirement
   if (!hasStarted) {
     return (
