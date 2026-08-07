@@ -68,23 +68,26 @@ export default function Admin() {
   };
 
   return (
-    
-      
-        {['create', 'live', 'results'].map((t) => (
-           setTab(t)}
-            className={`pb-2 px-1 capitalize font-medium text-sm border-b-2 transition ${
-              tab === t
-                ? 'border-indigo-600 text-indigo-600'
-                : 'border-transparent text-slate-500 hover:text-slate-700'
-            }`}
-          >
-            {t === 'create'
-              ? 'Create Quiz'
-              : t === 'live'
-              ? 'Live Respondent Monitor'
-              : 'Test Results'}
-          
-        ))}
+  <div className="flex space-x-8 border-b border-slate-200 mb-6">
+    {['create', 'live', 'results'].map((t) => (
+      <button
+        key={t}
+        onClick={() => setTab(t)}
+        className={`pb-2 px-1 capitalize font-medium text-sm border-b-2 transition ${
+          tab === t
+            ? 'border-indigo-600 text-indigo-600'
+            : 'border-transparent text-slate-500 hover:text-slate-700'
+        }`}
+      >
+        {t === 'create'
+          ? 'Create Quiz'
+          : t === 'live'
+          ? 'Live Respondent Monitor'
+          : 'Test Results'}
+      </button>
+    ))}
+  </div>
+);
       
 
       {tab === 'create' && (
