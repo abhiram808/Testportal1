@@ -15,7 +15,7 @@ app.use(express.json());
 // -------------------------------------------------------------
 // 1. CONNECT TO MONGO DB PERSISTENT DATABASE
 // -------------------------------------------------------------
-const MONGO_URI = process.env.MONGO_URI || 'mongodb+srv://<username>:<password>@cluster0.xxx.mongodb.net/testportal?retryWrites=true&w=majority';
+const MONGO_URI = process.env.MONGO_URI || 'mongodb+srv://abhiramkandula40_db_user:<abhiram2026>@cluster0.jqqgnyz.mongodb.net/?appName=Cluster0';
 
 mongoose.connect(MONGO_URI)
   .then(() => console.log('MongoDB Connected Successfully! Quizzes are now permanent.'))
