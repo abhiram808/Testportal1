@@ -15,11 +15,17 @@ app.use(express.json());
 // -------------------------------------------------------------
 // 1. CONNECT TO MONGO DB PERSISTENT DATABASE
 // -------------------------------------------------------------
-const MONGO_URI = process.env.MONGO_URI || 'mongodb+srv://abhiramkandula40_db_user:<abhiram2026>@cluster0.jqqgnyz.mongodb.net/?appName=Cluster0';
+const MONGO_URI = process.env.MONGO_URI;
+
+if (!MONGO_URI) {
+  console.error("CRITICAL ERROR: MONGO_URI environment variable is missing!");
+} else {
+  console.log("Attempting to connect to MongoDB...");
+}
 
 mongoose.connect(MONGO_URI)
-  .then(() => console.log('MongoDB Connected Successfully! Quizzes are now permanent.'))
-  .catch((err) => console.error('MongoDB Connection Error:', err));
+  .then(() => console.log('✅ MongoDB Connected Successfully!'))
+  .catch((err) => console.error('❌ MongoDB Connection Failure:', err.message));
 
 // -------------------------------------------------------------
 // 2. DEFINE DATABASE SCHEMAS
@@ -95,10 +101,22 @@ io.on('connection', (socket) => {
 });
 
 // -------------------------------------------------------------
-// 3. PERSISTENT API ENDPOINTS
+// 3. API ENDPOINTS
 // -------------------------------------------------------------
 
+// Health Check Endpoint
 app.get('/', (req, res) => res.send('Quiz API Server running with MongoDB persistence.'));
+
+// 🔍 DIAGNOSTIC ROUTE: Check DB status directly in browser
+app.get('/api/db-check', (req, res) => {
+  const state = mongoose.connection.readyState;
+  // 0 = disconnected, 1 = connected, 2 = connecting, 3 = disconnecting
+  const states = ['Disconnected', 'Connected', 'Connecting', 'Disconnecting'];
+  res.json({
+    dbState: states[state] || 'Unknown',
+    hasMongoUriEnv: !!process.env.MONGO_URI
+  });
+});
 
 // Create Quiz
 app.post('/api/quizzes', async (req, res) => {
@@ -107,6 +125,10 @@ app.post('/api/quizzes', async (req, res) => {
 
     if (!title || !subdomain || !userId) {
       return res.status(400).json({ message: 'Title, subdomain slug, and User ID are required.' });
+    }
+
+    if (mongoose.connection.readyState !== 1) {
+      return res.status(500).json({ message: 'Database is not connected. Check server MONGO_URI.' });
     }
 
     const existing = await Quiz.findOne({ subdomain });
@@ -126,7 +148,8 @@ app.post('/api/quizzes', async (req, res) => {
 
     res.status(201).json({ message: 'Quiz created successfully!', quiz: newQuiz });
   } catch (err) {
-    res.status(500).json({ message: 'Error saving quiz to database', error: err.message });
+    console.error("Database Save Error:", err);
+    res.status(500).json({ message: `Database Save Error: ${err.message}` });
   }
 });
 
@@ -135,6 +158,10 @@ app.get('/api/user/quizzes', async (req, res) => {
   try {
     const { userId } = req.query;
     if (!userId) return res.status(400).json({ message: 'userId query required' });
+
+    if (mongoose.connection.readyState !== 1) {
+      return res.json([]); // Return empty list instead of crashing if DB disconnected
+    }
 
     const myQuizzes = await Quiz.find({ userId }).sort({ createdAt: -1 });
     res.json(myQuizzes);
@@ -276,6 +303,10 @@ app.get('/api/user/results', async (req, res) => {
   try {
     const { userId } = req.query;
     if (!userId) return res.status(400).json({ message: 'userId query required' });
+
+    if (mongoose.connection.readyState !== 1) {
+      return res.json([]);
+    }
 
     const myResults = await Result.find({ quizOwnerId: userId }).sort({ submittedAt: -1 });
     res.json(myResults);
