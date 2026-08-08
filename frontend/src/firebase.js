@@ -3,12 +3,13 @@ import { initializeApp } from "firebase/app";
 import { getAuth, GoogleAuthProvider, signOut } from "firebase/auth";
 
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID
+  apiKey: "AIzaSyB0ScjwzKahK5Vhlt742LhnRxHnwu-K0pw",
+  authDomain: "abhiquiz-12.firebaseapp.com",
+  projectId: "abhiquiz-12",
+  storageBucket: "abhiquiz-12.firebasestorage.app",
+  messagingSenderId: "88063904694",
+  appId: "1:88063904694:web:6f0cf1477d70a88fa9cf17",
+  measurementId: "G-KTW62W8VT8"
 };
 
 const app = initializeApp(firebaseConfig);
