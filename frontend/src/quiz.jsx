@@ -17,6 +17,7 @@ export default function Quiz({ subdomain }) {
   const [hasStarted, setHasStarted] = useState(false);
   const [answers, setAnswers] = useState({});
   const [isSubmitted, setIsSubmitted] = useState(false);
+  const [submissionResult, setSubmissionResult] = useState(null);
 
   // Fetch Quiz Details
   useEffect(() => {
@@ -30,6 +31,28 @@ export default function Quiz({ subdomain }) {
       .then((data) => setQuiz(data))
       .catch((err) => console.error('Error loading quiz:', err));
   }, [subdomain]);
+
+  // Handle Answer Submission
+  const handleSubmitQuiz = async () => {
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/quizzes/${subdomain}/submit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ respondentName: candidateName, answers })
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        setSubmissionResult(data);
+        setIsSubmitted(true);
+      } else {
+        alert(data.message || 'Error submitting assessment.');
+      }
+    } catch (err) {
+      alert('Error connecting to backend server.');
+    }
+  };
 
   // SCREEN 1: LOADING / NOT FOUND
   if (!quiz) {
@@ -63,17 +86,42 @@ export default function Quiz({ subdomain }) {
     );
   }
 
-  // SCREEN 3: SUBMITTED SUCCESS
-  if (isSubmitted) {
+  // SCREEN 3: SUBMITTED SUCCESS & RESULT BREAKDOWN
+  if (isSubmitted && submissionResult) {
     return (
-      <div className="max-w-md mx-auto my-12 p-8 bg-white rounded-xl shadow-sm border border-slate-200 text-center space-y-4">
-        <h2 className="text-2xl font-bold text-emerald-600">Assessment Submitted!</h2>
-        <p className="text-slate-600">Thank you, <strong>{candidateName}</strong>. Your responses have been recorded.</p>
+      <div className="max-w-md mx-auto my-12 p-8 bg-white rounded-xl shadow-md border border-slate-200 text-center space-y-6">
+        <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto text-3xl font-bold">
+          ✓
+        </div>
+
+        <div className="space-y-1">
+          <h2 className="text-2xl font-bold text-slate-800">Assessment Completed!</h2>
+          <p className="text-sm text-slate-500">
+            Great job, <strong className="text-slate-700">{candidateName}</strong>!
+          </p>
+        </div>
+
+        {/* Score Summary Card */}
+        <div className="bg-slate-50 border border-slate-200 rounded-lg p-5 space-y-3">
+          <div className="text-xs uppercase font-semibold text-slate-400">Your Final Result</div>
+          
+          <div className="text-4xl font-extrabold text-indigo-600">
+            {submissionResult.score} / {submissionResult.totalQuestions}
+          </div>
+
+          <div className="text-sm font-semibold text-slate-700">
+            Score: <span className="text-emerald-600 font-bold">{submissionResult.percentage}%</span>
+          </div>
+        </div>
+
+        <p className="text-xs text-slate-400">
+          Your response has been transmitted to the assessment host.
+        </p>
       </div>
     );
   }
 
-  // SCREEN 4: START QUIZ (Only Candidate Name & Passcode)
+  // SCREEN 4: START QUIZ (Candidate Name Input)
   if (!hasStarted) {
     return (
       <div className="max-w-md mx-auto my-12 p-8 bg-white rounded-xl shadow-md border border-slate-200 space-y-6">
@@ -89,7 +137,6 @@ export default function Quiz({ subdomain }) {
         )}
 
         <div className="space-y-4">
-          {/* Candidate Name Input */}
           <div>
             <label className="block text-xs font-semibold text-slate-700 mb-1">
               Your Full Name <span className="text-red-500">*</span>
@@ -104,7 +151,6 @@ export default function Quiz({ subdomain }) {
             />
           </div>
 
-          {/* Group Passcode Input (Only if set by host) */}
           {quiz.passcode && (
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">
@@ -173,14 +219,7 @@ export default function Quiz({ subdomain }) {
       ))}
 
       <button
-        onClick={async () => {
-          await fetch(`${BACKEND_URL}/api/quizzes/${subdomain}/submit`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ respondentName: candidateName, answers })
-          });
-          setIsSubmitted(true);
-        }}
+        onClick={handleSubmitQuiz}
         className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-md shadow transition"
       >
         Submit Assessment
