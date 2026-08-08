@@ -10,6 +10,7 @@
     "postinstall": "chmod +x node_modules/.bin/*"
   },
   "dependencies": {
+    "firebase": "^12.17.1",
     "mammoth": "^1.12.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
