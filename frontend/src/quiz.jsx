@@ -1,29 +1,4 @@
 // frontend/src/quiz.jsx
-export default function Quiz({ subdomain }) {
-  const [user, setUser] = useState(null);
-  const [quiz, setQuiz] = useState(null);
-
-  // 1. MUST BE FIRST: If user is not authenticated, show AuthModal immediately
-  if (!user) {
-    return <AuthModal onUserAuthenticated={(authenticatedUser) => setUser(authenticatedUser)} />;
-  }
-
-  // 2. SECOND: If user is logged in, then check quiz loading status
-  if (!quiz) {
-    return (
-      <div className="max-w-md mx-auto my-12 p-6 bg-white rounded-xl shadow-sm border border-slate-200 text-center">
-        <p className="text-slate-600 font-medium">Loading assessment...</p>
-      </div>
-    );
-  }
-
-  // 3. THIRD: Render test screen
-  return (
-    <div>
-      {/* Test content */}
-    </div>
-  );
-}
 import React, { useState, useEffect } from 'react';
 import { io } from 'socket.io-client';
 
