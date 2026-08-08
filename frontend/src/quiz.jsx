@@ -1,4 +1,31 @@
 // frontend/src/quiz.jsx
+// Add at top of frontend/src/quiz.jsx
+import AuthModal from './AuthModal';
+import { auth, signOut } from './firebase';
+
+// Inside your Quiz component state:
+const [user, setUser] = useState(null);
+
+useEffect(() => {
+  const unsubscribe = auth.onAuthStateChanged((currentUser) => {
+    if (currentUser) {
+      setUser({
+        uid: currentUser.uid,
+        email: currentUser.email,
+        name: currentUser.displayName || currentUser.email.split('@')[0]
+      });
+      setRespondentName(currentUser.displayName || currentUser.email.split('@')[0]);
+    } else {
+      setUser(null);
+    }
+  });
+  return () => unsubscribe();
+}, []);
+
+// Check if user is logged in before rendering test
+if (!user) {
+  return <AuthModal onUserAuthenticated={(authenticatedUser) => setUser(authenticatedUser)} />;
+}
 import React, { useState, useEffect } from 'react';
 import { io } from 'socket.io-client';
 
