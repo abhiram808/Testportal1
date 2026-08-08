@@ -1,18 +1,14 @@
 // frontend/src/quiz.jsx
 import React, { useState, useEffect } from 'react';
 import { io } from 'socket.io-client';
-import { signOut } from 'firebase/auth';
-import AuthModal from './AuthModal';
-import { auth } from './firebase';
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
 const socket = io(BACKEND_URL);
 
 export default function Quiz({ subdomain }) {
-  const [user, setUser] = useState(null);
   const [quiz, setQuiz] = useState(null);
   
-  // Participant Form Inputs
+  // Candidate Inputs
   const [candidateName, setCandidateName] = useState('');
   const [passcodeEntered, setPasscodeEntered] = useState('');
   const [formError, setFormError] = useState('');
@@ -22,30 +18,9 @@ export default function Quiz({ subdomain }) {
   const [answers, setAnswers] = useState({});
   const [isSubmitted, setIsSubmitted] = useState(false);
 
-  // 1. Listen for Firebase Auth changes
+  // Fetch Quiz Details
   useEffect(() => {
-    const unsubscribe = auth.onAuthStateChanged((currentUser) => {
-      if (currentUser) {
-        setUser({
-          uid: currentUser.uid,
-          email: currentUser.email,
-          name: currentUser.displayName || ''
-        });
-        // Pre-fill name if available from Google, otherwise leave blank for manual input
-        if (currentUser.displayName) {
-          setCandidateName(currentUser.displayName);
-        }
-      } else {
-        setUser(null);
-      }
-    });
-
-    return () => unsubscribe();
-  }, []);
-
-  // 2. Fetch Quiz Details
-  useEffect(() => {
-    if (!subdomain || !user) return;
+    if (!subdomain) return;
 
     fetch(`${BACKEND_URL}/api/quizzes/${subdomain}`)
       .then((res) => {
@@ -54,14 +29,9 @@ export default function Quiz({ subdomain }) {
       })
       .then((data) => setQuiz(data))
       .catch((err) => console.error('Error loading quiz:', err));
-  }, [subdomain, user]);
+  }, [subdomain]);
 
-  // SCREEN 1: LOGIN GUARD
-  if (!user) {
-    return <AuthModal onUserAuthenticated={(authenticatedUser) => setUser(authenticatedUser)} />;
-  }
-
-  // SCREEN 2: LOADING / NOT FOUND
+  // SCREEN 1: LOADING / NOT FOUND
   if (!quiz) {
     return (
       <div className="max-w-md mx-auto my-12 p-6 bg-white rounded-xl shadow-sm border border-slate-200 text-center">
@@ -70,7 +40,7 @@ export default function Quiz({ subdomain }) {
     );
   }
 
-  // SCREEN 3: TEST STATUS CHECKS
+  // SCREEN 2: TEST STATUS CHECKS
   if (quiz.status === 'draft') {
     return (
       <div className="max-w-md mx-auto my-12 p-6 bg-white rounded-xl border border-slate-200 text-center">
@@ -93,7 +63,7 @@ export default function Quiz({ subdomain }) {
     );
   }
 
-  // SCREEN 4: SUBMITTED SUCCESS
+  // SCREEN 3: SUBMITTED SUCCESS
   if (isSubmitted) {
     return (
       <div className="max-w-md mx-auto my-12 p-8 bg-white rounded-xl shadow-sm border border-slate-200 text-center space-y-4">
@@ -103,23 +73,13 @@ export default function Quiz({ subdomain }) {
     );
   }
 
-  // SCREEN 5: START QUIZ (Explicit Candidate Name & Passcode Form)
+  // SCREEN 4: START QUIZ (Only Candidate Name & Passcode)
   if (!hasStarted) {
     return (
-      <div className="max-w-md mx-auto my-12 p-6 bg-white rounded-xl shadow-sm border border-slate-200 space-y-6">
-        <div className="flex justify-between items-center border-b pb-3">
-          <span className="text-xs text-slate-500 font-medium">Signed in: {user.email}</span>
-          <button
-            onClick={() => signOut(auth)}
-            className="text-xs text-red-600 hover:underline font-semibold"
-          >
-            Sign Out
-          </button>
-        </div>
-
+      <div className="max-w-md mx-auto my-12 p-8 bg-white rounded-xl shadow-md border border-slate-200 space-y-6">
         <div className="text-center space-y-1">
-          <h1 className="text-xl font-bold text-slate-800">{quiz.title}</h1>
-          <p className="text-xs text-slate-500">Please enter your candidate details to begin</p>
+          <h1 className="text-2xl font-bold text-slate-800">{quiz.title}</h1>
+          <p className="text-xs text-slate-500">Please enter your name to begin the assessment</p>
         </div>
 
         {formError && (
@@ -129,7 +89,7 @@ export default function Quiz({ subdomain }) {
         )}
 
         <div className="space-y-4">
-          {/* Explicit Full Name Field */}
+          {/* Candidate Name Input */}
           <div>
             <label className="block text-xs font-semibold text-slate-700 mb-1">
               Your Full Name <span className="text-red-500">*</span>
@@ -139,12 +99,12 @@ export default function Quiz({ subdomain }) {
               value={candidateName}
               onChange={(e) => setCandidateName(e.target.value)}
               placeholder="e.g. John Doe"
-              className="w-full border border-slate-300 rounded p-2.5 text-sm outline-none focus:ring-2 focus:ring-indigo-500"
+              className="w-full border border-slate-300 rounded-md p-2.5 text-sm outline-none focus:ring-2 focus:ring-indigo-500"
               required
             />
           </div>
 
-          {/* Optional Group Passcode Field */}
+          {/* Group Passcode Input (Only if set by host) */}
           {quiz.passcode && (
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">
@@ -155,7 +115,7 @@ export default function Quiz({ subdomain }) {
                 value={passcodeEntered}
                 onChange={(e) => setPasscodeEntered(e.target.value)}
                 placeholder="Enter passcode provided by host"
-                className="w-full border border-slate-300 rounded p-2.5 text-sm outline-none focus:ring-2 focus:ring-indigo-500"
+                className="w-full border border-slate-300 rounded-md p-2.5 text-sm outline-none focus:ring-2 focus:ring-indigo-500"
               />
             </div>
           )}
@@ -175,7 +135,7 @@ export default function Quiz({ subdomain }) {
             setHasStarted(true);
             socket.emit('start_session', { subdomain, respondentName: candidateName.trim() });
           }}
-          className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-md shadow text-sm transition"
+          className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-md shadow text-sm transition"
         >
           Start Assessment
         </button>
@@ -183,12 +143,12 @@ export default function Quiz({ subdomain }) {
     );
   }
 
-  // SCREEN 6: ACTIVE TEST TAKING
+  // SCREEN 5: ACTIVE TEST TAKING
   return (
     <div className="max-w-2xl mx-auto my-8 p-6 bg-white rounded-xl border border-slate-200 space-y-6">
       <div className="flex justify-between items-center border-b pb-3">
         <h2 className="text-xl font-bold text-slate-800">{quiz.title}</h2>
-        <span className="text-xs bg-slate-100 text-slate-700 font-medium px-2.5 py-1 rounded">
+        <span className="text-xs bg-indigo-50 text-indigo-700 font-semibold px-3 py-1 rounded-full border border-indigo-100">
           Candidate: {candidateName}
         </span>
       </div>
