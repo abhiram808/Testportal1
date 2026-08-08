@@ -13,8 +13,9 @@ export default function Quiz({ subdomain }) {
   const [passcodeEntered, setPasscodeEntered] = useState('');
   const [formError, setFormError] = useState('');
 
-  // Assessment State
+  // Assessment Navigation State
   const [hasStarted, setHasStarted] = useState(false);
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0); // 👈 ONE-BY-ONE INDEX
   const [answers, setAnswers] = useState({});
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [submissionResult, setSubmissionResult] = useState(null);
@@ -34,6 +35,8 @@ export default function Quiz({ subdomain }) {
 
   // Handle Answer Submission
   const handleSubmitQuiz = async () => {
+    if (!window.confirm('Are you sure you want to submit your assessment?')) return;
+
     try {
       const response = await fetch(`${BACKEND_URL}/api/quizzes/${subdomain}/submit`, {
         method: 'POST',
@@ -121,7 +124,7 @@ export default function Quiz({ subdomain }) {
     );
   }
 
-  // SCREEN 4: START QUIZ (Candidate Name Input)
+  // SCREEN 4: START QUIZ (Candidate Details Input)
   if (!hasStarted) {
     return (
       <div className="max-w-md mx-auto my-12 p-8 bg-white rounded-xl shadow-md border border-slate-200 space-y-6">
@@ -189,41 +192,118 @@ export default function Quiz({ subdomain }) {
     );
   }
 
-  // SCREEN 5: ACTIVE TEST TAKING
+  // Active Single Question Data
+  const currentQuestion = quiz.questions ? quiz.questions[currentQuestionIndex] : null;
+  const totalQuestions = quiz.questions ? quiz.questions.length : 0;
+  const currentQuestionKey = currentQuestion ? (currentQuestion.id !== undefined ? currentQuestion.id : currentQuestionIndex) : currentQuestionIndex;
+
+  // SCREEN 5: ONE-BY-ONE ACTIVE TEST TAKING
   return (
-    <div className="max-w-2xl mx-auto my-8 p-6 bg-white rounded-xl border border-slate-200 space-y-6">
-      <div className="flex justify-between items-center border-b pb-3">
-        <h2 className="text-xl font-bold text-slate-800">{quiz.title}</h2>
+    <div className="max-w-3xl mx-auto my-8 p-6 bg-white rounded-xl border border-slate-200 shadow-sm space-y-6">
+      {/* Header Bar */}
+      <div className="flex justify-between items-center border-b pb-4">
+        <div>
+          <h2 className="text-xl font-bold text-slate-800">{quiz.title}</h2>
+          <p className="text-xs text-slate-500 mt-0.5">
+            Question <span className="font-semibold text-indigo-600">{currentQuestionIndex + 1}</span> of {totalQuestions}
+          </p>
+        </div>
         <span className="text-xs bg-indigo-50 text-indigo-700 font-semibold px-3 py-1 rounded-full border border-indigo-100">
           Candidate: {candidateName}
         </span>
       </div>
-      
-      {quiz.questions && quiz.questions.map((q, idx) => (
-        <div key={idx} className="p-4 border border-slate-200 rounded-lg space-y-3">
-          <p className="font-medium text-slate-800 text-sm">{idx + 1}. {q.text}</p>
-          <div className="space-y-2">
-            {q.options.map((opt, optIdx) => (
-              <label key={optIdx} className="flex items-center space-x-2 text-sm cursor-pointer">
+
+      {/* Question Number Palette / Navigation Pills */}
+      <div className="flex flex-wrap gap-1.5 pt-1">
+        {quiz.questions && quiz.questions.map((q, idx) => {
+          const qKey = q.id !== undefined ? q.id : idx;
+          const isAnswered = answers[qKey] !== undefined;
+          const isCurrent = idx === currentQuestionIndex;
+
+          return (
+            <button
+              key={idx}
+              onClick={() => setCurrentQuestionIndex(idx)}
+              className={`w-8 h-8 rounded-md text-xs font-semibold border transition ${
+                isCurrent
+                  ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                  : isAnswered
+                  ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                  : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+              }`}
+            >
+              {idx + 1}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Single Active Question Box */}
+      {currentQuestion ? (
+        <div className="p-6 border border-slate-200 rounded-lg bg-slate-50 space-y-4">
+          <p className="font-semibold text-slate-800 text-base">
+            Q{currentQuestionIndex + 1}. {currentQuestion.text}
+          </p>
+
+          <div className="space-y-2.5 pt-2">
+            {currentQuestion.options.map((opt, optIdx) => (
+              <label
+                key={optIdx}
+                onClick={() => setAnswers({ ...answers, [currentQuestionKey]: optIdx })}
+                className={`flex items-center space-x-3 p-3 rounded-md border cursor-pointer text-sm font-medium transition ${
+                  answers[currentQuestionKey] === optIdx
+                    ? 'bg-indigo-50 border-indigo-500 text-indigo-900 shadow-sm'
+                    : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-100'
+                }`}
+              >
                 <input
                   type="radio"
-                  name={`question-${idx}`}
-                  checked={answers[q.id || idx] === optIdx}
-                  onChange={() => setAnswers({ ...answers, [q.id || idx]: optIdx })}
+                  name={`question-${currentQuestionIndex}`}
+                  checked={answers[currentQuestionKey] === optIdx}
+                  onChange={() => setAnswers({ ...answers, [currentQuestionKey]: optIdx })}
+                  className="w-4 h-4 text-indigo-600 focus:ring-indigo-500"
                 />
                 <span>{opt}</span>
               </label>
             ))}
           </div>
         </div>
-      ))}
+      ) : (
+        <p className="text-slate-500 text-center py-6">No question content available.</p>
+      )}
 
-      <button
-        onClick={handleSubmitQuiz}
-        className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-md shadow transition"
-      >
-        Submit Assessment
-      </button>
+      {/* Action Controls: Previous, Save & Next, Submit */}
+      <div className="flex justify-between items-center border-t pt-4">
+        {/* Previous Button */}
+        <button
+          onClick={() => setCurrentQuestionIndex((prev) => Math.max(0, prev - 1))}
+          disabled={currentQuestionIndex === 0}
+          className={`px-4 py-2 text-xs font-semibold rounded-md border transition ${
+            currentQuestionIndex === 0
+              ? 'opacity-40 bg-slate-100 text-slate-400 cursor-not-allowed border-slate-200'
+              : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
+          }`}
+        >
+          ← Previous
+        </button>
+
+        {/* Right Action: Save & Next OR Submit */}
+        {currentQuestionIndex < totalQuestions - 1 ? (
+          <button
+            onClick={() => setCurrentQuestionIndex((prev) => Math.min(totalQuestions - 1, prev + 1))}
+            className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-md shadow text-xs transition"
+          >
+            Save & Next →
+          </button>
+        ) : (
+          <button
+            onClick={handleSubmitQuiz}
+            className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-md shadow text-xs transition"
+          >
+            ✓ Submit Assessment
+          </button>
+        )}
+      </div>
     </div>
   );
 }
