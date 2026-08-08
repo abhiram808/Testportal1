@@ -144,7 +144,12 @@ export default function Dashboard() {
     const data = await res.json();
 
     if (res.ok) {
-      alert(editingSubdomain ? 'Quiz Updated Successfully!' : 'Quiz Created Successfully!');
+      const fullLink = `${window.location.origin}/?quiz=${subdomainInput}`;
+      alert(
+        editingSubdomain
+          ? 'Quiz Updated Successfully!'
+          : `Quiz Published Successfully!\n\nCandidate Share Link:\n${fullLink}`
+      );
       resetForm();
       fetchMyQuizzes();
       setTab('manage');
@@ -330,76 +335,104 @@ export default function Dashboard() {
               <thead className="bg-slate-100 text-slate-700 font-semibold border-b border-slate-200">
                 <tr>
                   <th className="p-3">Quiz Title</th>
-                  <th className="p-3">Share Link Slug</th>
                   <th className="p-3">Status</th>
-                  <th className="p-3 text-right">Actions</th>
+                  <th className="p-3 text-right">Actions & Share Link</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
                 {quizzesList.length === 0 ? (
                   <tr>
-                    <td colSpan="4" className="p-4 text-center text-slate-500">
+                    <td colSpan="3" className="p-4 text-center text-slate-500">
                       You haven't created any quizzes yet. Click "+ Create New Quiz" to start.
                     </td>
                   </tr>
                 ) : (
-                  quizzesList.map((q) => (
-                    <tr key={q.id || q.subdomain} className="hover:bg-slate-50">
-                      <td className="p-3 font-semibold text-slate-800">{q.title}</td>
-                      <td className="p-3 text-indigo-600 font-mono text-xs">?quiz={q.subdomain}</td>
-                      <td className="p-3">
-                        <span
-                          className={`px-2.5 py-1 rounded-full text-xs font-semibold uppercase ${
-                            q.status === 'active'
-                              ? 'bg-emerald-100 text-emerald-700'
-                              : q.status === 'ended'
-                              ? 'bg-red-100 text-red-700'
-                              : 'bg-amber-100 text-amber-700'
-                          }`}
-                        >
-                          {q.status || 'draft'}
-                        </span>
-                      </td>
-                      <td className="p-3 text-right space-x-1.5">
-                        {q.status !== 'active' ? (
-                          <button
-                            onClick={() => handleUpdateStatus(q.subdomain, 'active')}
-                            className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-xs font-medium"
+                  quizzesList.map((q) => {
+                    const fullQuizUrl = `${window.location.origin}/?quiz=${q.subdomain}`;
+
+                    return (
+                      <tr key={q.id || q.subdomain} className="hover:bg-slate-50">
+                        <td className="p-3 font-semibold text-slate-800 align-top">
+                          {q.title}
+                        </td>
+
+                        <td className="p-3 align-top">
+                          <span
+                            className={`px-2.5 py-1 rounded-full text-xs font-semibold uppercase ${
+                              q.status === 'active'
+                                ? 'bg-emerald-100 text-emerald-700'
+                                : q.status === 'ended'
+                                ? 'bg-red-100 text-red-700'
+                                : 'bg-amber-100 text-amber-700'
+                            }`}
                           >
-                            ▶ Start
-                          </button>
-                        ) : (
-                          <button
-                            onClick={() => handleUpdateStatus(q.subdomain, 'ended')}
-                            className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded text-xs font-medium"
-                          >
-                            ⏹ End
-                          </button>
-                        )}
+                            {q.status || 'draft'}
+                          </span>
+                        </td>
 
-                        <button
-                          onClick={() => handleRestartQuiz(q.subdomain)}
-                          className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs font-medium"
-                        >
-                          🔄 Restart
-                        </button>
+                        {/* Actions Column with Subdomain Link right under the Start button */}
+                        <td className="p-3 text-right align-top">
+                          <div className="flex flex-col items-end space-y-2">
+                            {/* Row 1: Action Buttons */}
+                            <div className="flex items-center space-x-1.5">
+                              {q.status !== 'active' ? (
+                                <button
+                                  onClick={() => handleUpdateStatus(q.subdomain, 'active')}
+                                  className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-xs font-semibold shadow-sm"
+                                >
+                                  ▶ Start
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={() => handleUpdateStatus(q.subdomain, 'ended')}
+                                  className="px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded text-xs font-semibold shadow-sm"
+                                >
+                                  ⏹ End
+                                </button>
+                              )}
 
-                        <button
-                          onClick={() => handleEditQuiz(q)}
-                          className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded text-xs font-medium"
-                        >
-                          ✏️ Edit
-                        </button>
+                              <button
+                                onClick={() => handleRestartQuiz(q.subdomain)}
+                                className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs font-medium"
+                              >
+                                🔄 Restart
+                              </button>
 
-                        <button
-                          onClick={() => handleDeleteQuiz(q.subdomain)}
-                          className="px-2.5 py-1 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded text-xs font-medium"
-                        >
-                          🗑️ Delete
-                        </button>
-                      </td>
-                    </tr>
-                  ))
+                              <button
+                                onClick={() => handleEditQuiz(q)}
+                                className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded text-xs font-medium"
+                              >
+                                ✏️ Edit
+                              </button>
+
+                              <button
+                                onClick={() => handleDeleteQuiz(q.subdomain)}
+                                className="px-2.5 py-1 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded text-xs font-medium"
+                              >
+                                🗑️ Delete
+                              </button>
+                            </div>
+
+                            {/* Row 2: Subdomain Link Box right below the Start button */}
+                            <div className="flex items-center space-x-2 bg-slate-100 px-2.5 py-1 rounded border border-slate-200 text-xs">
+                              <span className="font-mono text-indigo-600 font-semibold select-all">
+                                ?quiz={q.subdomain}
+                              </span>
+                              <button
+                                onClick={() => {
+                                  navigator.clipboard.writeText(fullQuizUrl);
+                                  alert(`Link copied to clipboard!\n${fullQuizUrl}`);
+                                }}
+                                className="text-[11px] bg-white border border-slate-300 hover:bg-slate-50 px-2 py-0.5 rounded font-medium text-slate-700 transition"
+                              >
+                                📋 Copy Link
+                              </button>
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>
