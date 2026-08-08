@@ -214,3 +214,15 @@ app.delete('/api/user/results/:id', (req, res) => {
 
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+// Restart Test Endpoint
+app.post('/api/user/quizzes/:subdomain/restart', (req, res) => {
+  const { subdomain } = req.params;
+  const quiz = quizzes.find((q) => q.subdomain === subdomain);
+
+  if (!quiz) return res.status(404).json({ message: 'Quiz not found' });
+
+  quiz.status = 'active';
+  io.emit('quiz_status_changed', { subdomain, status: 'active' });
+
+  res.json({ message: 'Test restarted successfully!', quiz });
+});
